@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# build / runtime
+bin/
+logs/
+.vscode/
+
+# images (keep only sample inputs if you want)
+images/*.jpg
+!images/README.md
