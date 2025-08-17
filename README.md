@@ -41,11 +41,6 @@ Execute o binário passando o caminho da imagem de entrada e o caminho para salv
 
 ## Requisitos
 
-
-## Autor
-
-Gabriel Diniz
-
 ## Caso de Uso do Algoritmo Paralelizado
 
 

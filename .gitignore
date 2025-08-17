@@ -5,7 +5,7 @@
 bin/
 logs/
 .vscode/
-
-# images (keep only sample inputs if you want)
-images/*.jpg
-!images/README.md
+.venv/
+__pycache__/
+external/yolov5/
+EOF
