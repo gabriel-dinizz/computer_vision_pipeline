@@ -1,0 +1,18 @@
+# System dependencies (install via Homebrew, not pip):
+# cmake
+# pkg-config
+# make
+# opencv
+# libomp
+# gcc
+numpy
+pandas
+matplotlib
+seaborn
+opencv-python-headless
+
+# PyTorch (CPU-only wheel, will resolve platform automatically)
+torch
+torchvision
+torchaudio
+
