@@ -5,7 +5,11 @@
 bin/
 logs/
 .vscode/
-.venv/
 __pycache__/
 external/yolov5/
 EOF
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
