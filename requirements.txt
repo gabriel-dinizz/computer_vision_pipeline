@@ -5,14 +5,15 @@
 # opencv
 # libomp
 # gcc
+# Python libs (project)
 numpy
 pandas
 matplotlib
 seaborn
 opencv-python-headless
 
-# PyTorch (CPU-only wheel, will resolve platform automatically)
-torch
-torchvision
-torchaudio
+# PyTorch (CPU-only) — pin to 2.5.x for YOLOv5 compatibility
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
 

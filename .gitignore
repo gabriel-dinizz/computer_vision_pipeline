@@ -6,7 +6,6 @@ bin/
 logs/
 .vscode/
 __pycache__/
-external/yolov5/
 EOF
 .venv/
 venv/
