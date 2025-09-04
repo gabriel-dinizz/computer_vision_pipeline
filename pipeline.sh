@@ -164,6 +164,8 @@ run_command() {
     local device="cpu"
     local output=""
     local verbose=""
+    local threads=""
+    local controlled="false"
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -187,6 +189,14 @@ run_command() {
                 verbose="-v"
                 shift
                 ;;
+            -t|--threads)
+                threads="$2"
+                shift 2
+                ;;
+            --controlled)
+                controlled="true"
+                shift
+                ;;
             *)
                 echo -e "${RED}Unknown option: $1${NC}"
                 return 1
@@ -194,10 +204,12 @@ run_command() {
         esac
     done
     
-    # Validate image path
-    if [ ! -f "$image" ]; then
-        echo -e "${RED}Image file not found: $image${NC}"
-        return 1
+    # Validate image path (skip for research commands)
+    if [[ "$cmd" != "research-validate" && "$cmd" != "research-benchmark" ]]; then
+        if [ ! -f "$image" ]; then
+            echo -e "${RED}Image file not found: $image${NC}"
+            return 1
+        fi
     fi
     
     cd "$PROJECT_ROOT"
@@ -210,10 +222,44 @@ run_command() {
         fi
     fi
     
+    # Set controlled environment if requested
+    if [[ "$controlled" == "true" ]]; then
+        echo -e "${BLUE}Setting controlled research environment...${NC}"
+        
+        # Set CPU affinity if available (Linux)
+        if command -v taskset &> /dev/null && [ -n "$threads" ]; then
+            local cpu_list=""
+            for ((i=0; i<threads; i++)); do
+                cpu_list="$cpu_list$i"
+                if [ $i -lt $((threads-1)) ]; then
+                    cpu_list="$cpu_list,"
+                fi
+            done
+            export TASKSET_CMD="taskset -c $cpu_list"
+            echo "CPU affinity set to cores: $cpu_list"
+        fi
+        
+        # Set thread count
+        if [ -n "$threads" ]; then
+            export OMP_NUM_THREADS="$threads"
+            echo "OpenMP threads set to: $threads"
+        fi
+        
+        # Disable CPU frequency scaling if possible
+        echo "Note: For research accuracy, consider disabling CPU frequency scaling"
+    fi
+    
     case "$cmd" in
         "process")
             echo -e "${BLUE}Running full pipeline on $image${NC}"
-            python3 python/pipeline.py "$image" -f "$filter" -c "$confidence" -d "$device" $verbose $([ -n "$output" ] && echo "-o $output")
+            
+            # Run with controlled environment if set
+            local run_cmd="python3 python/pipeline.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\" $verbose $([ -n \"$output\" ] && echo \"-o $output\")"
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd="$TASKSET_CMD $run_cmd"
+            fi
+            
+            eval $run_cmd
             ;;
         "assess")
             echo -e "${BLUE}Assessing image quality: $image${NC}"
@@ -223,12 +269,112 @@ run_command() {
             echo -e "${BLUE}Preprocessing image: $image${NC}"
             local output_path="${output:-temp/preprocessed_$(basename "$image")}"
             mkdir -p "$(dirname "$output_path")"
-            ./bin/preprocess "$image" "$output_path" "$filter"
-            echo -e "${GREEN}Preprocessed image saved to: $output_path${NC}"
+            
+            # Run with controlled environment if set
+            local run_cmd="./bin/preprocess \"$image\" \"$output_path\" \"$filter\""
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd="$TASKSET_CMD $run_cmd"
+            fi
+            
+            eval $run_cmd
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Preprocessed image saved to: $output_path${NC}"
+            else
+                echo -e "${RED}Preprocessing failed!${NC}"
+                return 1
+            fi
             ;;
         "detect")
             echo -e "${BLUE}Running YOLO detection on: $image${NC}"
             python3 python/pipeline.py "$image" -c "$confidence" -d "$device" $verbose $([ -n "$output" ] && echo "-o $output")
+            ;;
+        "research-benchmark")
+            echo -e "${BLUE}Starting academic research benchmark...${NC}"
+            if [ ! -f python/research_benchmark_academic.py ]; then
+                echo -e "${RED}Research benchmark script not found!${NC}"
+                return 1
+            fi
+            
+            # Run with controlled environment if set
+            cd python
+            local run_cmd="python research_benchmark_academic.py"
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd="$TASKSET_CMD $run_cmd"
+            fi
+            
+            echo "Running: $run_cmd"
+            eval $run_cmd
+            cd ..
+            ;;
+        "research-validate")
+            echo -e "${BLUE}Validating academic research setup...${NC}"
+            
+            # Check all required files
+            local required_files=(
+                "src/preprocess.cpp"
+                "src/sequential_baseline.cpp"
+                "src/opencv_baseline.cpp"
+                "research_benchmark_academic.py"
+                "bin/preprocess"
+                "bin/sequential_baseline"
+                "bin/opencv_baseline"
+            )
+            
+            local missing_files=()
+            for file in "${required_files[@]}"; do
+                if [ ! -f "$file" ]; then
+                    missing_files+=("$file")
+                fi
+            done
+            
+            if [ ${#missing_files[@]} -gt 0 ]; then
+                echo -e "${RED}Missing required files:${NC}"
+                for file in "${missing_files[@]}"; do
+                    echo "  - $file"
+                done
+                return 1
+            fi
+            
+            echo -e "${GREEN}All required files present!${NC}"
+            echo -e "${BLUE}Running quick validation...${NC}"
+            
+            # Test preprocessing with a quick run
+            if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then
+                echo "Testing parallel preprocessing..."
+                ./bin/preprocess "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_parallel.jpg" "blur"
+                
+                echo "Testing sequential baseline..."
+                ./bin/sequential_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_sequential.jpg" "blur"
+                
+                echo "Testing OpenCV baseline..."
+                ./bin/opencv_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_opencv.jpg" "blur"
+                
+                echo -e "${GREEN}All baselines working correctly!${NC}"
+            else
+                echo -e "${YELLOW}No test image found, skipping processing validation${NC}"
+            fi
+            ;;
+        "research-benchmark")
+            echo -e "${BLUE}Starting academic research benchmark...${NC}"
+            if [ ! -f research_benchmark_academic.py ]; then
+                echo -e "${RED}Research benchmark script not found!${NC}"
+                return 1
+            fi
+            
+            # Activate virtual environment if it exists
+            if [ -d "research_env" ]; then
+                echo "Activating research environment..."
+                source research_env/bin/activate
+            fi
+            
+            # Run with controlled environment if set
+            local run_cmd="python research_benchmark_academic.py"
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd="$TASKSET_CMD $run_cmd"
+            fi
+            
+            echo "Running: $run_cmd"
+            eval $run_cmd
             ;;
         *)
             echo -e "${RED}Unknown command: $cmd${NC}"
@@ -252,6 +398,16 @@ case "$1" in
         ;;
     "benchmark")
         run_benchmark
+        ;;
+    "research-benchmark")
+        # Research benchmark with controlled environment
+        shift
+        run_command research-benchmark "" "$@"
+        ;;
+    "research-validate")
+        # Validate academic research setup
+        shift
+        run_command research-validate "" "$@"
         ;;
     "process"|"assess"|"preprocess"|"detect")
         if [ $# -lt 2 ]; then

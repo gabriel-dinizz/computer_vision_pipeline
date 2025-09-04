@@ -46,15 +46,53 @@ GAUSSIAN_BIN := $(BIN_DIR)/gaussian_blur
 PYTHON_DIR := python
 PIPELINE_SCRIPT := $(PYTHON_DIR)/pipeline.py
 
-.PHONY: all clean test install-deps help run-pipeline build-filters
+# Research-specific binaries
+SEQUENTIAL_SRC := $(SRC_DIR)/sequential_baseline.cpp
+SEQUENTIAL_BIN := $(BIN_DIR)/sequential_baseline
 
-all: $(PREPROCESS_BIN) build-filters
+OPENCV_BASELINE_SRC := $(SRC_DIR)/opencv_baseline.cpp
+OPENCV_BASELINE_BIN := $(BIN_DIR)/opencv_baseline
+
+# Optimized preprocessing binary
+PREPROCESS_OPTIMIZED_SRC := $(SRC_DIR)/preprocess_optimized.cpp
+PREPROCESS_OPTIMIZED_BIN := $(BIN_DIR)/preprocess_optimized
+
+.PHONY: all clean test install-deps help run-pipeline build-filters research-all research-benchmark research-report optimized
+
+# All targets including research components
+all: $(PREPROCESS_BIN) $(SEQUENTIAL_BIN) $(OPENCV_BASELINE_BIN) $(PREPROCESS_OPTIMIZED_BIN)
+
+preprocess: $(PREPROCESS_BIN)
+sequential_baseline: $(SEQUENTIAL_BIN)
+opencv_baseline: $(OPENCV_BASELINE_BIN)
+optimized: $(PREPROCESS_OPTIMIZED_BIN)
+
+# Research targets
+research-all: $(PREPROCESS_BIN) $(SEQUENTIAL_BIN) $(OPENCV_BASELINE_BIN) $(PREPROCESS_OPTIMIZED_BIN) build-filters
+
+# Sequential baseline binary
+$(SEQUENTIAL_BIN): $(SEQUENTIAL_SRC)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "Built sequential baseline: $@"
+
+# OpenCV baseline binary
+$(OPENCV_BASELINE_BIN): $(OPENCV_BASELINE_SRC)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "Built OpenCV baseline: $@"
 
 # Main preprocessing binary
 $(PREPROCESS_BIN): $(PREPROCESS_SRC)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "Built enhanced preprocessing pipeline: $@"
+
+# Optimized preprocessing binary
+$(PREPROCESS_OPTIMIZED_BIN): $(PREPROCESS_OPTIMIZED_SRC)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "Built optimized OpenMP preprocessing pipeline: $@"
 
 # Build filter algorithms
 build-filters:
@@ -119,6 +157,25 @@ benchmark: $(PREPROCESS_BIN)
 		echo "Sample image not found for benchmark."; \
 	fi
 
+# Run academic research benchmark
+research-benchmark: research-all
+	@echo "Running academic research benchmark..."
+	@if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then \
+		python3 research_benchmark_academic.py; \
+	else \
+		echo "Sample image not found for research benchmark."; \
+	fi
+
+# Generate research report
+research-report: research-benchmark
+	@echo "Generating academic research report..."
+	@echo "Results available in research_results/ directory"
+
+# Validate research reproducibility
+research-validate: research-all
+	@echo "Validating research reproducibility..."
+	@python3 -c "import research_benchmark_academic; b = research_benchmark_academic.OpenMPResearchBenchmark(iterations=10); b.run_complete_research_study('images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg')"
+
 clean:
 	rm -rf $(BIN_DIR) $(TEMP_DIR)
 	@cd $(FILTER_SRC_DIR) && $(MAKE) clean
@@ -126,16 +183,25 @@ clean:
 
 help:
 	@echo "Computer Vision Pipeline - Available targets:"
-	@echo "  all          - Build preprocessing binary and filter algorithms"
-	@echo "  test         - Test preprocessing with sample image"
-	@echo "  run-pipeline - Run full Python pipeline with YOLO detection"
-	@echo "  run-custom   - Run pipeline with custom image (make run-custom IMAGE=path)"
-	@echo "  assess       - Assess image quality only (make assess IMAGE=path)"
-	@echo "  benchmark    - Run performance benchmark"
-	@echo "  install-deps - Install Python dependencies and download YOLO weights"
-	@echo "  build-filters- Build filter convolution algorithms separately"
-	@echo "  clean        - Remove all build files"
-	@echo "  help         - Show this help message"
+	@echo "  all                    - Build preprocessing binary and filter algorithms"
+	@echo "  research-all           - Build all binaries including research baselines"
+	@echo "  research-benchmark     - Run complete academic research benchmark"
+	@echo "  research-report        - Generate academic research report"
+	@echo "  research-validate      - Validate research reproducibility"
+	@echo "  test                   - Test preprocessing with sample image"
+	@echo "  run-pipeline           - Run full Python pipeline with YOLO detection"
+	@echo "  run-custom             - Run pipeline with custom image (make run-custom IMAGE=path)"
+	@echo "  assess                 - Assess image quality only (make assess IMAGE=path)"
+	@echo "  benchmark              - Run performance benchmark"
+	@echo "  install-deps           - Install Python dependencies and download YOLO weights"
+	@echo "  build-filters          - Build filter convolution algorithms separately"
+	@echo "  clean                  - Remove all build files"
+	@echo "  help                   - Show this help message"
+	@echo ""
+	@echo "Research Examples:"
+	@echo "  make research-benchmark          # Run complete academic study"
+	@echo "  make research-validate           # Quick reproducibility check"
+	@echo "  make research-report             # Generate final report"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run-custom IMAGE=images/my_photo.jpg"
