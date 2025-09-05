@@ -328,29 +328,29 @@ class OpenMPResearchBenchmark:
             for threads in self.thread_counts:
                 if threads == 1:
                     continue  # Skip, we have sequential baseline
-                    
+
                 print(f"  Running parallel benchmark - {threads} threads...")
                 par_result = self.run_parallel_benchmark(image_path, filter_type, threads)
                 parallel_results.append(par_result)
-            
+
             # 3. Analysis
             analysis = self.calculate_research_metrics(sequential_result, parallel_results)
             all_analyses.append(analysis)
-            
+
             # 4. Generate plots
             self.generate_academic_plots(analysis)
-            
+
             # 5. Save raw data
             df = pd.DataFrame([sequential_result] + parallel_results)
             df.to_csv(self.results_dir / f'{filter_type}_raw_data.csv', index=False)
-            
+
             print(f"  ✅ {filter_type.upper()} analysis complete")
             print(f"     Max speedup: {max([d['speedup'] for d in analysis['thread_analysis']]):.2f}x")
             print()
-        
+
         # Generate final report
         report = self.generate_research_report(all_analyses)
-        
+
         print("🎉 Research Study Complete!")
         print(f"📁 Results saved to: {self.results_dir}")
         print()
@@ -361,7 +361,7 @@ class OpenMPResearchBenchmark:
             print(f"    Optimal Threads: {findings['optimal_thread_count']}")
             print(f"    8-Thread Efficiency: {findings['efficiency_at_8_threads']:.1%}")
             print(f"    Production Ready: {'✅' if findings['recommended_for_production'] else '❌'}")
-        
+
         return report
 
 if __name__ == "__main__":
