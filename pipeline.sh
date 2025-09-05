@@ -48,24 +48,24 @@ print_usage() {
 
 check_dependencies() {
     local missing_deps=()
-    
+
     # Check for required tools
     if ! command -v make &> /dev/null; then
         missing_deps+=("make")
     fi
-    
+
     if ! command -v pkg-config &> /dev/null; then
         missing_deps+=("pkg-config")
     fi
-    
+
     if ! pkg-config --exists opencv4 && ! pkg-config --exists opencv; then
         missing_deps+=("opencv")
     fi
-    
+
     if ! command -v python3 &> /dev/null; then
         missing_deps+=("python3")
     fi
-    
+
     if [ ${#missing_deps[@]} -ne 0 ]; then
         echo -e "${RED}Missing dependencies: ${missing_deps[*]}${NC}"
         echo ""
@@ -78,36 +78,36 @@ check_dependencies() {
         echo ""
         return 1
     fi
-    
+
     return 0
 }
 
 build_project() {
     echo -e "${BLUE}Building project...${NC}"
     cd "$PROJECT_ROOT"
-    
+
     if ! make all; then
         echo -e "${RED}Build failed!${NC}"
         return 1
     fi
-    
+
     echo -e "${GREEN}Build successful!${NC}"
     return 0
 }
 
 setup_pipeline() {
     echo -e "${BLUE}Setting up Computer Vision Pipeline...${NC}"
-    
+
     # Check dependencies
     if ! check_dependencies; then
         return 1
     fi
-    
+
     # Build project
     if ! build_project; then
         return 1
     fi
-    
+
     # Install Python dependencies
     echo -e "${BLUE}Installing Python dependencies...${NC}"
     if ! make install-deps; then
@@ -115,41 +115,41 @@ setup_pipeline() {
         echo "You may need to install manually:"
         echo "  pip3 install opencv-python numpy torch torchvision"
     fi
-    
+
     echo -e "${GREEN}Setup complete!${NC}"
     echo ""
     echo "You can now run:"
     echo "  $0 test                    # Run tests"
     echo "  $0 process images/photo.jpg # Process an image"
-    
+
     return 0
 }
 
 run_test() {
     echo -e "${BLUE}Running pipeline tests...${NC}"
     cd "$PROJECT_ROOT"
-    
+
     if [ ! -f bin/preprocess ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
         if ! build_project; then
             return 1
         fi
     fi
-    
+
     make test
 }
 
 run_benchmark() {
     echo -e "${BLUE}Running performance benchmark...${NC}"
     cd "$PROJECT_ROOT"
-    
+
     if [ ! -f bin/preprocess ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
         if ! build_project; then
             return 1
         fi
     fi
-    
+
     make benchmark
 }
 
@@ -157,7 +157,7 @@ run_command() {
     local cmd="$1"
     local image="$2"
     shift 2
-    
+
     # Parse options
     local filter="auto"
     local confidence="0.25"
@@ -166,7 +166,7 @@ run_command() {
     local verbose=""
     local threads=""
     local controlled="false"
-    
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             -f|--filter)
@@ -203,7 +203,7 @@ run_command() {
                 ;;
         esac
     done
-    
+
     # Validate image path (skip for research commands)
     if [[ "$cmd" != "research-validate" && "$cmd" != "research-benchmark" ]]; then
         if [ ! -f "$image" ]; then
@@ -211,9 +211,9 @@ run_command() {
             return 1
         fi
     fi
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # Ensure binary exists
     if [[ "$cmd" == "process" || "$cmd" == "preprocess" ]] && [ ! -f bin/preprocess ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
@@ -221,11 +221,11 @@ run_command() {
             return 1
         fi
     fi
-    
+
     # Set controlled environment if requested
     if [[ "$controlled" == "true" ]]; then
         echo -e "${BLUE}Setting controlled research environment...${NC}"
-        
+
         # Set CPU affinity if available (Linux)
         if command -v taskset &> /dev/null && [ -n "$threads" ]; then
             local cpu_list=""
@@ -238,27 +238,27 @@ run_command() {
             export TASKSET_CMD="taskset -c $cpu_list"
             echo "CPU affinity set to cores: $cpu_list"
         fi
-        
+
         # Set thread count
         if [ -n "$threads" ]; then
             export OMP_NUM_THREADS="$threads"
             echo "OpenMP threads set to: $threads"
         fi
-        
+
         # Disable CPU frequency scaling if possible
         echo "Note: For research accuracy, consider disabling CPU frequency scaling"
     fi
-    
+
     case "$cmd" in
         "process")
             echo -e "${BLUE}Running full pipeline on $image${NC}"
-            
+
             # Run with controlled environment if set
             local run_cmd="python3 python/pipeline.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\" $verbose $([ -n \"$output\" ] && echo \"-o $output\")"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-            
+
             eval $run_cmd
             ;;
         "assess")
@@ -269,13 +269,13 @@ run_command() {
             echo -e "${BLUE}Preprocessing image: $image${NC}"
             local output_path="${output:-temp/preprocessed_$(basename "$image")}"
             mkdir -p "$(dirname "$output_path")"
-            
+
             # Run with controlled environment if set
             local run_cmd="./bin/preprocess \"$image\" \"$output_path\" \"$filter\""
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-            
+
             eval $run_cmd
             if [ $? -eq 0 ]; then
                 echo -e "${GREEN}Preprocessed image saved to: $output_path${NC}"
@@ -294,21 +294,21 @@ run_command() {
                 echo -e "${RED}Research benchmark script not found!${NC}"
                 return 1
             fi
-            
+
             # Run with controlled environment if set
             cd python
             local run_cmd="python research_benchmark_academic.py"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-            
+
             echo "Running: $run_cmd"
             eval $run_cmd
             cd ..
             ;;
         "research-validate")
             echo -e "${BLUE}Validating academic research setup...${NC}"
-            
+
             # Check all required files
             local required_files=(
                 "src/preprocess.cpp"
@@ -319,14 +319,14 @@ run_command() {
                 "bin/sequential_baseline"
                 "bin/opencv_baseline"
             )
-            
+
             local missing_files=()
             for file in "${required_files[@]}"; do
                 if [ ! -f "$file" ]; then
                     missing_files+=("$file")
                 fi
             done
-            
+
             if [ ${#missing_files[@]} -gt 0 ]; then
                 echo -e "${RED}Missing required files:${NC}"
                 for file in "${missing_files[@]}"; do
@@ -334,21 +334,21 @@ run_command() {
                 done
                 return 1
             fi
-            
+
             echo -e "${GREEN}All required files present!${NC}"
             echo -e "${BLUE}Running quick validation...${NC}"
-            
+
             # Test preprocessing with a quick run
             if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then
                 echo "Testing parallel preprocessing..."
                 ./bin/preprocess "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_parallel.jpg" "blur"
-                
+
                 echo "Testing sequential baseline..."
                 ./bin/sequential_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_sequential.jpg" "blur"
-                
+
                 echo "Testing OpenCV baseline..."
                 ./bin/opencv_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_opencv.jpg" "blur"
-                
+
                 echo -e "${GREEN}All baselines working correctly!${NC}"
             else
                 echo -e "${YELLOW}No test image found, skipping processing validation${NC}"
@@ -360,19 +360,19 @@ run_command() {
                 echo -e "${RED}Research benchmark script not found!${NC}"
                 return 1
             fi
-            
+
             # Activate virtual environment if it exists
             if [ -d "research_env" ]; then
                 echo "Activating research environment..."
                 source research_env/bin/activate
             fi
-            
+
             # Run with controlled environment if set
             local run_cmd="python research_benchmark_academic.py"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-            
+
             echo "Running: $run_cmd"
             eval $run_cmd
             ;;

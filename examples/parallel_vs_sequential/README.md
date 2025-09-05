@@ -5,7 +5,7 @@ This folder contains side-by-side comparisons of parallel (OpenMP) and sequentia
 ## Files
 
 - `gaussian_blur_comparison.cpp` - Gaussian blur: parallel vs sequential
-- `sharpen_comparison.cpp` - Unsharp masking: parallel vs sequential  
+- `sharpen_comparison.cpp` - Unsharp masking: parallel vs sequential
 - `bilateral_comparison.cpp` - Bilateral filter: parallel vs sequential
 - `benchmark.cpp` - Performance benchmarking tool
 - `Makefile` - Build system
