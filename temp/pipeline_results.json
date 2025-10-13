@@ -1,0 +1,95 @@
+{
+  "input_image": "../temp/preprocessed_sample.jpg",
+  "filter_type": "auto",
+  "timing": {
+    "preprocessing": 920.6142425537109,
+    "detection": 220.03698348999023,
+    "total": 1140.6512260437012
+  },
+  "preprocessing": {
+    "success": true,
+    "output_path": "../temp/preprocessed_preprocessed_sample.jpg"
+  },
+  "detection": {
+    "image_path": "../temp/preprocessed_preprocessed_sample.jpg",
+    "detections": [
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.9413078427314758,
+        "bbox": [
+          36,
+          32,
+          930,
+          481
+        ],
+        "center": [
+          483,
+          256
+        ],
+        "area": 401406
+      },
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.7450005412101746,
+        "bbox": [
+          850,
+          19,
+          959,
+          286
+        ],
+        "center": [
+          904,
+          152
+        ],
+        "area": 29103
+      },
+      {
+        "class": 7,
+        "class_name": "truck",
+        "confidence": 0.7219392657279968,
+        "bbox": [
+          1,
+          0,
+          223,
+          106
+        ],
+        "center": [
+          112,
+          53
+        ],
+        "area": 23532
+      },
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.35097452998161316,
+        "bbox": [
+          879,
+          36,
+          940,
+          77
+        ],
+        "center": [
+          909,
+          56
+        ],
+        "area": 2501
+      }
+    ],
+    "detection_count": 4,
+    "timing": {
+      "preprocess": 0.0,
+      "inference": 144.24586296081543,
+      "postprocess": 0.4279613494873047,
+      "total": 144.67501640319824
+    },
+    "model_info": {
+      "weights": "yolov5s.pt",
+      "device": "cpu",
+      "conf_threshold": 0.25,
+      "iou_threshold": 0.45
+    }
+  }
+}

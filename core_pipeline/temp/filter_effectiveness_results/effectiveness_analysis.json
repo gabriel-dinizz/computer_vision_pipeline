@@ -1,0 +1,81 @@
+{
+  "test_image": "images/severely_degraded_demo.jpg",
+  "filter_type": "denoise",
+  "results": {
+    "without_filter": {
+      "detections": 1,
+      "total_time_ms": 177.6421070098877,
+      "detection_details": [
+        {
+          "class": 2,
+          "class_name": "car",
+          "confidence": 0.6268125176429749,
+          "bbox": [
+            31,
+            31,
+            928,
+            476
+          ],
+          "center": [
+            479,
+            253
+          ],
+          "area": 399165
+        }
+      ],
+      "output_dir": "temp/filter_effectiveness_results/without_filter"
+    },
+    "with_filter": {
+      "detections": 2,
+      "total_time_ms": 861.7761135101318,
+      "preprocessing_time_ms": 734.9541187286377,
+      "detection_time_ms": 126.82199478149414,
+      "detection_details": [
+        {
+          "class": 2,
+          "class_name": "car",
+          "confidence": 0.8045063614845276,
+          "bbox": [
+            8,
+            28,
+            931,
+            478
+          ],
+          "center": [
+            469,
+            253
+          ],
+          "area": 415350
+        },
+        {
+          "class": 2,
+          "class_name": "car",
+          "confidence": 0.4227411448955536,
+          "bbox": [
+            846,
+            34,
+            959,
+            305
+          ],
+          "center": [
+            902,
+            169
+          ],
+          "area": 30623
+        }
+      ],
+      "filter_used": "denoise",
+      "output_dir": "temp/filter_effectiveness_results/with_filter"
+    }
+  },
+  "analysis": {
+    "detection_improvement": 1,
+    "confidence_improvement": -0.013188764452934265,
+    "avg_confidence_without": 0.6268125176429749,
+    "avg_confidence_with": 0.6136237531900406,
+    "time_overhead_ms": 684.1340065002441,
+    "relative_overhead_percent": 385.11928169269277,
+    "effectiveness": "EFFECTIVE"
+  },
+  "timestamp": "2025-09-20 11:31:15"
+}
