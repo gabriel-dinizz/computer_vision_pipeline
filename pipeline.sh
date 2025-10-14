@@ -25,7 +25,8 @@ print_usage() {
     echo "  full-pipeline <image> - Run enhanced full pipeline"
     echo "  compare <image>      - Compare with/without preprocessing"
     echo "  yolo-only <image>    - Run YOLO detection only"
-    echo "  benchmark <image>    - Run comprehensive benchmark"
+    echo "  benchmark <image>    - Run comprehensive benchmark (fast, 5 runs)"
+    echo "  academic-benchmark <image> - Run academic benchmark (scientific analysis)"
     echo "  assess <image>       - Assess image quality only"
     echo "  preprocess <image>   - Preprocess image only"
     echo "  detect <image>       - Run YOLO detection only"
@@ -44,7 +45,8 @@ print_usage() {
     echo "  $0 process images/photo.jpg                    # Full pipeline with auto filter"
     echo "  $0 compare images/photo.jpg -f sharpen         # Compare with/without preprocessing"
     echo "  $0 yolo-only images/photo.jpg -c 0.5           # YOLO detection only"
-    echo "  $0 benchmark images/photo.jpg                  # Full performance benchmark"
+    echo "  $0 benchmark images/photo.jpg                  # Quick benchmark (5 runs)"
+    echo "  $0 academic-benchmark images/photo.jpg         # Academic analysis (all filters, threads)"
     echo "  $0 assess images/blurry.jpg                    # Check image quality"
     echo "  $0 preprocess images/photo.jpg -f denoise      # Denoise only"
     echo ""
@@ -257,38 +259,69 @@ run_command() {
         "process")
             echo -e "${BLUE}Running full pipeline on $image${NC}"
 
-            # Run with controlled environment if set
-            local run_cmd="python3 python/pipeline.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\" $verbose $([ -n \"$output\" ] && echo \"-o $output\")"
+            # Convert image to absolute path
+            image=$(cd "$(dirname "$image")" && pwd)/$(basename "$image")
+
+            # Run with controlled environment if set (from core_pipeline directory)
+            cd core_pipeline
+            local run_cmd="python3 python/pipeline_integration.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\""
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-
             eval $run_cmd
+            cd ..
             ;;
         "full-pipeline")
             echo -e "${BLUE}Running enhanced full pipeline on $image${NC}"
-            
-            local run_cmd="python3 python/full_pipeline.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\" $verbose $([ -n \"$output\" ] && echo \"-o $output\")"
+
+            # Convert image to absolute path
+            image=$(cd "$(dirname "$image")" && pwd)/$(basename "$image")
+
+            # Run with controlled environment if set (from core_pipeline directory)
+            cd core_pipeline
+            local run_cmd="python3 full_pipeline.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\""
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-
             eval $run_cmd
+            cd ..
             ;;
         "compare")
             echo -e "${BLUE}Comparing pipeline performance on $image${NC}"
-            
-            local run_cmd="python3 python/full_pipeline.py \"$image\" -m compare -f \"$filter\" -c \"$confidence\" -d \"$device\" $verbose $([ -n \"$output\" ] && echo \"-o $output\")"
+
+            # Convert image to absolute path
+            image=$(cd "$(dirname "$image")" && pwd)/$(basename "$image")
+
+            echo -e "${YELLOW}Running pipeline WITH preprocessing...${NC}"
+
+            # Run with preprocessing (from core_pipeline directory)
+            cd core_pipeline
+            local run_cmd="python3 python/pipeline_integration.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\""
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
-
             eval $run_cmd
+            cd ..
+
+            echo ""
+            echo -e "${YELLOW}Running YOLO-only (WITHOUT preprocessing)...${NC}"
+
+            # Run without preprocessing (YOLO only) - from core_pipeline directory
+            cd core_pipeline
+            local run_cmd2="python3 python/yolo_detector.py \"$image\" -c \"$confidence\" -d \"$device\" $([ -n \"$output\" ] && echo \"-o $output\") --save"
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd2="$TASKSET_CMD $run_cmd2"
+            fi
+            eval $run_cmd2
+            cd ..
+
+            echo ""
+            echo -e "${GREEN}Comparison complete! Check the results above.${NC}"
             ;;
         "yolo-only")
             echo -e "${BLUE}Running YOLO detection only on $image${NC}"
-            
-            local run_cmd="python3 python/yolo_detector.py \"$image\" -c \"$confidence\" -d \"$device\" $([ -n \"$output\" ] && echo \"-o $output\") --save"
+
+            local run_cmd="python3 core_pipeline/python/yolo_detector.py \"$image\" -c \"$confidence\" -d \"$device\" $([ -n \"$output\" ] && echo \"-o $output\") --save"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
@@ -297,32 +330,91 @@ run_command() {
             ;;
         "benchmark")
             echo -e "${BLUE}Running comprehensive benchmark on $image${NC}"
-            
-            local bench_args=""
-            if [ -n "$threads" ]; then
-                bench_args="$bench_args -r $threads"
-            else
-                bench_args="$bench_args -r 5"
-            fi
-            
-            local run_cmd="python3 benchmark_pipeline.py \"$image\" $bench_args -f \"$filter\" -c \"$confidence\" -d \"$device\" $([ -n \"$output\" ] && echo \"-o $output\")"
+
+            # Convert image to absolute path
+            image=$(cd "$(dirname "$image")" && pwd)/$(basename "$image")
+
+            # Default to 5 runs if threads not specified
+            local num_runs="${threads:-5}"
+
+            # Run benchmark from core_pipeline directory
+            cd core_pipeline
+            local run_cmd="python3 python/pipeline_integration.py \"$image\" -f \"$filter\" -c \"$confidence\" -d \"$device\" -b $num_runs"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
 
             eval $run_cmd
+            cd ..
+            ;;
+        "academic-benchmark")
+            echo -e "${BLUE}Running academic benchmark on $image${NC}"
+            echo -e "${YELLOW}This will take 20-30 minutes (5 filters × 4 thread counts × 10 iterations)${NC}"
+            echo ""
+
+            # Convert image to absolute path
+            image=$(cd "$(dirname "$image")" && pwd)/$(basename "$image")
+
+            # Check if benchmark script exists
+            if [ ! -f core_pipeline/benchmark_academic.py ]; then
+                echo -e "${RED}Academic benchmark script not found!${NC}"
+                echo "Expected: core_pipeline/benchmark_academic.py"
+                return 1
+            fi
+
+            # Check if preprocessor binary exists
+            if [ ! -f core_pipeline/bin/preprocess_optimized ]; then
+                echo -e "${RED}Preprocessor binary not found!${NC}"
+                echo "Run: make all"
+                return 1
+            fi
+
+            # Run academic benchmark from core_pipeline directory
+            cd core_pipeline
+            local run_cmd="python3 benchmark_academic.py --image \"$image\""
+            if [ -n "$TASKSET_CMD" ]; then
+                run_cmd="$TASKSET_CMD $run_cmd"
+            fi
+
+            echo -e "${GREEN}Starting academic benchmark...${NC}"
+            echo "Running: $run_cmd"
+            echo ""
+            eval $run_cmd
+
+            if [ $? -eq 0 ]; then
+                echo ""
+                echo -e "${GREEN}✅ Academic benchmark completed!${NC}"
+                echo ""
+                echo "📊 Results saved to:"
+                echo "  - results_academic/complete_results.json"
+                echo "  - results_academic/academic_summary.md"
+                echo "  - results_academic/speedup_analysis.png"
+                echo "  - results_academic/preprocessing_performance.png"
+                echo ""
+                echo "View summary:"
+                echo "  cat results_academic/academic_summary.md"
+                echo ""
+                echo "View graphs:"
+                echo "  open results_academic/*.png"
+            else
+                echo -e "${RED}❌ Academic benchmark failed!${NC}"
+            fi
+
+            cd ..
             ;;
         "assess")
             echo -e "${BLUE}Assessing image quality: $image${NC}"
-            python3 python/pipeline.py "$image" --assess-only $verbose
+            # Use the C++ preprocessor to assess image quality
+            core_pipeline/bin/preprocess_optimized "$image" /tmp/dummy_output.jpg auto | grep -A 5 "Image Quality Assessment"
+            rm -f /tmp/dummy_output.jpg
             ;;
         "preprocess")
             echo -e "${BLUE}Preprocessing image: $image${NC}"
-            local output_path="${output:-temp/preprocessed_$(basename "$image")}"
+            local output_path="${output:-core_pipeline/temp/preprocessed_$(basename "$image")}"
             mkdir -p "$(dirname "$output_path")"
 
             # Run with controlled environment if set
-            local run_cmd="./bin/preprocess \"$image\" \"$output_path\" \"$filter\""
+            local run_cmd="core_pipeline/bin/preprocess_optimized \"$image\" \"$output_path\" \"$filter\""
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
@@ -337,18 +429,18 @@ run_command() {
             ;;
         "detect")
             echo -e "${BLUE}Running YOLO detection on: $image${NC}"
-            python3 python/pipeline.py "$image" -c "$confidence" -d "$device" $verbose $([ -n "$output" ] && echo "-o $output")
+            python3 core_pipeline/python/yolo_detector.py "$image" -c "$confidence" -d "$device" $verbose $([ -n "$output" ] && echo "-o $output") --save
             ;;
         "research-benchmark")
             echo -e "${BLUE}Starting academic research benchmark...${NC}"
-            if [ ! -f python/research_benchmark_academic.py ]; then
+            if [ ! -f core_pipeline/benchmark_academic.py ]; then
                 echo -e "${RED}Research benchmark script not found!${NC}"
                 return 1
             fi
 
             # Run with controlled environment if set
-            cd python
-            local run_cmd="python research_benchmark_academic.py"
+            cd core_pipeline
+            local run_cmd="python3 benchmark_academic.py"
             if [ -n "$TASKSET_CMD" ]; then
                 run_cmd="$TASKSET_CMD $run_cmd"
             fi
@@ -447,9 +539,6 @@ case "$1" in
     "test")
         run_test
         ;;
-    "benchmark")
-        run_benchmark
-        ;;
     "research-benchmark")
         # Research benchmark with controlled environment
         shift
@@ -460,7 +549,7 @@ case "$1" in
         shift
         run_command research-validate "" "$@"
         ;;
-    "process"|"full-pipeline"|"compare"|"yolo-only"|"benchmark"|"assess"|"preprocess"|"detect")
+    "process"|"full-pipeline"|"compare"|"yolo-only"|"benchmark"|"academic-benchmark"|"assess"|"preprocess"|"detect")
         if [ $# -lt 2 ]; then
             echo -e "${RED}Error: Image path required for $1 command${NC}"
             echo ""
