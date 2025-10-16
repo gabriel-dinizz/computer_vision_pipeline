@@ -104,7 +104,9 @@ class OptimizedImagePreprocessor {
     auto convStart = std::chrono::high_resolution_clock::now();
 
 // PHASE 1: Horizontal convolution (parallelized by rows)
-#pragma omp parallel for schedule(dynamic, 4) num_threads(omp_get_max_threads())
+// Use static scheduling with larger chunks for better performance
+// Dynamic scheduling with chunk=4 causes too much overhead
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int y = 0; y < img.rows; y++) {
       const cv::Vec3f* srcRow = imgFloat.ptr<cv::Vec3f>(y);
       cv::Vec3f* dstRow = intermediate.ptr<cv::Vec3f>(y);
@@ -126,28 +128,25 @@ class OptimizedImagePreprocessor {
       }
     }
 
-    // PHASE 2: Vertical convolution (parallelized by columns in tiles)
-    const int tileWidth = std::max(1, img.cols / (omp_get_max_threads() * 2));
+    // PHASE 2: Vertical convolution (parallelized by rows for better cache locality)
+    // Process by rows instead of columns to maintain cache-friendly access patterns
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
+    for (int y = 0; y < img.rows; y++) {
+      cv::Vec3f* dstRow = result.ptr<cv::Vec3f>(y);
 
-#pragma omp parallel for schedule(dynamic) num_threads(omp_get_max_threads())
-    for (int tileX = 0; tileX < img.cols; tileX += tileWidth) {
-      int endX = std::min(tileX + tileWidth, img.cols);
+      for (int x = 0; x < img.cols; x++) {
+        cv::Vec3f sum(0, 0, 0);
 
-      for (int x = tileX; x < endX; x++) {
-        for (int y = 0; y < img.rows; y++) {
-          cv::Vec3f sum(0, 0, 0);
+        for (int k = 0; k < kernelSize; k++) {
+          int srcY = y - radius + k;
+          // Handle boundaries by clamping
+          srcY = std::max(0, std::min(srcY, img.rows - 1));
 
-          for (int k = 0; k < kernelSize; k++) {
-            int srcY = y - radius + k;
-            // Handle boundaries by clamping
-            srcY = std::max(0, std::min(srcY, img.rows - 1));
-
-            cv::Vec3f pixel = intermediate.ptr<cv::Vec3f>(srcY)[x];
-            sum += pixel * kernel[k];
-          }
-
-          result.ptr<cv::Vec3f>(y)[x] = sum;
+          cv::Vec3f pixel = intermediate.ptr<cv::Vec3f>(srcY)[x];
+          sum += pixel * kernel[k];
         }
+
+        dstRow[x] = sum;
       }
     }
 
@@ -195,7 +194,8 @@ class OptimizedImagePreprocessor {
     auto convStart = std::chrono::high_resolution_clock::now();
 
 // Tile-based parallel processing with optimal work distribution
-#pragma omp parallel for schedule(dynamic, 1) num_threads(omp_get_max_threads())
+// Use static scheduling for better performance (tiles are uniform)
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
       int tileY = tileIdx / tilesX;
       int tileX = tileIdx % tilesX;
@@ -280,7 +280,8 @@ class OptimizedImagePreprocessor {
     auto convStart = std::chrono::high_resolution_clock::now();
 
 // Parallel processing with optimized memory access
-#pragma omp parallel for schedule(dynamic, 4) num_threads(omp_get_max_threads())
+// Static scheduling for uniform row processing
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int y = 0; y < img.rows; y++) {
       cv::Vec3b* resultRow = result.ptr<cv::Vec3b>(y);
       const cv::Vec3f* centerRow = imgFloat.ptr<cv::Vec3f>(y);
@@ -393,7 +394,8 @@ class OptimizedImagePreprocessor {
     auto convStart = std::chrono::high_resolution_clock::now();
 
 // Parallel edge enhancement
-#pragma omp parallel for schedule(dynamic, 4) num_threads(omp_get_max_threads())
+// Static scheduling for uniform row processing
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int y = 0; y < img.rows; y++) {
       const cv::Vec3b* originalRow = img.ptr<cv::Vec3b>(y);
       const uchar* edgeRow = edges.ptr<uchar>(y);
