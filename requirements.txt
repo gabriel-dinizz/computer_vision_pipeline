@@ -1,18 +1,13 @@
-# System dependencies (install via Homebrew, not pip):
-# cmake
-# pkg-config
-# make
-# opencv
-# libomp
-# gcc
-# Python libs (project)
-numpy
-pandas
-matplotlib
-seaborn
-opencv-python-headless
-
-# PyTorch (CPU-only) — pin to 2.5.x for YOLOv5 compatibility
-torch==2.5.1
-torchvision==0.20.1
-torchaudio==2.5.1
+numpy==2.2.6
+scipy==1.16.2
+pandas==2.3.3
+opencv-python-headless==4.12.0.88
+pillow==11.3.0
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+ultralytics==8.3.213
+matplotlib==3.10.7
+seaborn==0.13.2
+PyYAML==6.0.3
+psutil==7.1.0
