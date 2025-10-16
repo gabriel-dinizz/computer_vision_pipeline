@@ -117,10 +117,10 @@ class AcademicCVBenchmark:
     
     def _run_single_preprocessing(self, image_path: str, filter_type: str) -> float:
         """Run single preprocessing test and return execution time in ms"""
+        import re
+
         output_path = self.temp_dir / f"bench_{filter_type}.jpg"
-        
-        start_time = time.perf_counter()
-        
+
         try:
             cmd = [
                 str(self.preprocess_bin),
@@ -128,21 +128,28 @@ class AcademicCVBenchmark:
                 str(output_path),
                 filter_type
             ]
-            
+
             result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                text=True, 
+                cmd,
+                capture_output=True,
+                text=True,
                 timeout=30
             )
-            
+
             if result.returncode == 0:
-                elapsed = (time.perf_counter() - start_time) * 1000  # Convert to ms
-                return elapsed
+                # Parse actual processing time from C++ output
+                # Look for "Total processing time: X ms"
+                match = re.search(r'Total processing time:\s+([\d.]+)\s+ms', result.stdout)
+                if match:
+                    elapsed = float(match.group(1))
+                    return elapsed
+                else:
+                    print(f"Warning: Could not parse time from output")
+                    return -1
             else:
                 print(f"Error: {result.stderr}")
                 return -1
-                
+
         except subprocess.TimeoutExpired:
             print("Timeout")
             return -1
