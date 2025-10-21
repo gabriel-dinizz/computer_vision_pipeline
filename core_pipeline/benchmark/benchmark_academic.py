@@ -289,8 +289,11 @@ class AcademicCVBenchmark:
                         thread_counts_with_speedup.append(tc)
                 
                 if speedups:
-                    ax1.plot(thread_counts_with_speedup, speedups, marker='o', 
-                            linewidth=2, markersize=8, label=filter_type.title())
+                    ax1.plot(
+                        thread_counts_with_speedup, speedups,
+                        marker='o', linewidth=2, markersize=8,
+                        label=filter_type.title()
+                    )
         
         # Ideal speedup line
         ideal_threads = [t for t in self.thread_counts if t > 1]
@@ -317,10 +320,16 @@ class AcademicCVBenchmark:
                         thread_counts_with_eff.append(tc)
                 
                 if efficiencies:
-                    ax2.plot(thread_counts_with_eff, efficiencies, marker='s', 
-                            linewidth=2, markersize=8, label=filter_type.title())
-        
-        ax2.axhline(y=1.0, color='k', linestyle='--', alpha=0.5, label='Perfect Efficiency')
+                    ax2.plot(
+                        thread_counts_with_eff, efficiencies,
+                        marker='s', linewidth=2, markersize=8,
+                        label=filter_type.title()
+                    )
+
+        ax2.axhline(
+            y=1.0, color='k', linestyle='--',
+            alpha=0.5, label='Perfect Efficiency'
+        )
         ax2.set_xlabel('Thread Count')
         ax2.set_ylabel('Parallel Efficiency')
         ax2.set_title('Parallel Efficiency vs Thread Count')
