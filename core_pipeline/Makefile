@@ -49,11 +49,11 @@ LDFLAGS  := $(OPENCV_LIBS) $(OMP_LIBS)
 # ============================================================================
 # PROJECT DIRECTORY STRUCTURE
 # ============================================================================
-SRC_DIR := src                # C++ source files
-BIN_DIR := bin                # Compiled binaries
-TEMP_DIR := temp              # Temporary processing outputs
-PYTHON_DIR := python          # Python YOLO detection scripts
-BENCHMARK_DIR := benchmark    # Academic benchmark results
+SRC_DIR := src# C++ source files
+BIN_DIR := bin# Compiled binaries
+TEMP_DIR := temp# Temporary processing outputs
+PYTHON_DIR := python# Python YOLO detection scripts
+BENCHMARK_DIR := benchmark# Academic benchmark results
 
 # ============================================================================
 # BUILD TARGETS
@@ -164,7 +164,7 @@ pipeline: $(PREPROCESS_BIN)
 benchmark: $(PREPROCESS_BIN)
 	@echo "Running academic benchmark..."
 	@mkdir -p $(BENCHMARK_DIR)
-	cd $(BENCHMARK_DIR) && python3 ../benchmark_academic.py $(if $(IMAGE),--image $(IMAGE),)
+	cd $(BENCHMARK_DIR) && python3 benchmark_academic.py $(if $(IMAGE),--image $(IMAGE),)
 	@echo "✓ Benchmark completed - results in $(BENCHMARK_DIR)/"
 
 # ============================================================================

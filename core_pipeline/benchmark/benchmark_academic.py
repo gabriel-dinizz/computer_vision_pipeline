@@ -181,7 +181,7 @@ class AcademicCVBenchmark:
         # Import pipeline integration
         import sys
         script_dir = Path(__file__).parent
-        sys.path.append(str((script_dir / "python").resolve()))
+        sys.path.append(str((script_dir.parent / "python").resolve()))
         from pipeline_integration import CVPipeline
         
         pipeline = CVPipeline()
