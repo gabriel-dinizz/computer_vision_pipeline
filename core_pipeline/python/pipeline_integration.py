@@ -21,9 +21,9 @@ class CVPipeline:
     2. Python YOLO detection
     """
     
-    def __init__(self, preprocess_bin: str = "../bin/preprocess_optimized"):
+    def __init__(self, preprocess_bin: str = "bin/preprocess_optimized"):
         self.preprocess_bin = Path(preprocess_bin)
-        self.temp_dir = Path("../temp")
+        self.temp_dir = Path("temp")
         self.temp_dir.mkdir(exist_ok=True)
         
     def run_full_pipeline(self, image_path: str, filter_type: str = "auto",
@@ -197,7 +197,7 @@ def main():
             print(f"❌ Error: {results['error']}")
         else:
             # Save results
-            results_file = Path("../temp/pipeline_results.json")
+            results_file = Path("temp/pipeline_results.json")
             with open(results_file, 'w') as f:
                 json.dump(results, f, indent=2)
             print(f"📄 Results saved to: {results_file}")

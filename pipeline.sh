@@ -90,7 +90,7 @@ check_dependencies() {
 
 build_project() {
     echo -e "${BLUE}Building project...${NC}"
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_ROOT/core_pipeline"
 
     if ! make all; then
         echo -e "${RED}Build failed!${NC}"
@@ -133,9 +133,9 @@ setup_pipeline() {
 
 run_test() {
     echo -e "${BLUE}Running pipeline tests...${NC}"
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_ROOT/core_pipeline"
 
-    if [ ! -f bin/preprocess ]; then
+    if [ ! -f bin/preprocess_optimized ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
         if ! build_project; then
             return 1
@@ -147,9 +147,9 @@ run_test() {
 
 run_benchmark() {
     echo -e "${BLUE}Running performance benchmark...${NC}"
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_ROOT/core_pipeline"
 
-    if [ ! -f bin/preprocess ]; then
+    if [ ! -f bin/preprocess_optimized ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
         if ! build_project; then
             return 1
@@ -221,7 +221,7 @@ run_command() {
     cd "$PROJECT_ROOT"
 
     # Ensure binary exists
-    if [[ "$cmd" == "process" || "$cmd" == "preprocess" ]] && [ ! -f bin/preprocess ]; then
+    if [[ "$cmd" == "process" || "$cmd" == "preprocess" ]] && [ ! -f core_pipeline/bin/preprocess_optimized ]; then
         echo -e "${YELLOW}Binary not found, building...${NC}"
         if ! build_project; then
             return 1
@@ -454,13 +454,13 @@ run_command() {
 
             # Check all required files
             local required_files=(
-                "src/preprocess.cpp"
-                "src/sequential_baseline.cpp"
-                "src/opencv_baseline.cpp"
+                "core_pipeline/src/preprocess_optimized.cpp"
+                "core_pipeline/src/sequential_baseline.cpp"
+                "core_pipeline/src/opencv_baseline.cpp"
                 "research_benchmark_academic.py"
-                "bin/preprocess"
-                "bin/sequential_baseline"
-                "bin/opencv_baseline"
+                "core_pipeline/bin/preprocess_optimized"
+                "core_pipeline/bin/sequential_baseline"
+                "core_pipeline/bin/opencv_baseline"
             )
 
             local missing_files=()
@@ -482,15 +482,15 @@ run_command() {
             echo -e "${BLUE}Running quick validation...${NC}"
 
             # Test preprocessing with a quick run
-            if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then
+            if [ -f "core_pipeline/images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then
                 echo "Testing parallel preprocessing..."
-                ./bin/preprocess "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_parallel.jpg" "blur"
+                ./core_pipeline/bin/preprocess_optimized "core_pipeline/images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "core_pipeline/temp/test_parallel.jpg" "blur"
 
                 echo "Testing sequential baseline..."
-                ./bin/sequential_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_sequential.jpg" "blur"
+                ./core_pipeline/bin/sequential_baseline "core_pipeline/images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "core_pipeline/temp/test_sequential.jpg" "blur"
 
                 echo "Testing OpenCV baseline..."
-                ./bin/opencv_baseline "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "temp/test_opencv.jpg" "blur"
+                ./core_pipeline/bin/opencv_baseline "core_pipeline/images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" "core_pipeline/temp/test_opencv.jpg" "blur"
 
                 echo -e "${GREEN}All baselines working correctly!${NC}"
             else

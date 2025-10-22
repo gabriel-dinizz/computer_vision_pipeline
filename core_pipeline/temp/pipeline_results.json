@@ -1,0 +1,95 @@
+{
+  "input_image": "/Users/gabrieldiniz/tcc/development/computer_vision_pipeline/core_pipeline/images/sample.jpg",
+  "filter_type": "blur",
+  "timing": {
+    "preprocessing": 559.2508316040039,
+    "detection": 203.77707481384277,
+    "total": 763.0279064178467
+  },
+  "preprocessing": {
+    "success": true,
+    "output_path": "temp/preprocessed_sample.jpg"
+  },
+  "detection": {
+    "image_path": "temp/preprocessed_sample.jpg",
+    "detections": [
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.9377376437187195,
+        "bbox": [
+          36,
+          34,
+          933,
+          483
+        ],
+        "center": [
+          484,
+          258
+        ],
+        "area": 402753
+      },
+      {
+        "class": 7,
+        "class_name": "truck",
+        "confidence": 0.7723293900489807,
+        "bbox": [
+          1,
+          0,
+          220,
+          106
+        ],
+        "center": [
+          110,
+          53
+        ],
+        "area": 23214
+      },
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.7276626825332642,
+        "bbox": [
+          851,
+          19,
+          959,
+          281
+        ],
+        "center": [
+          905,
+          150
+        ],
+        "area": 28296
+      },
+      {
+        "class": 2,
+        "class_name": "car",
+        "confidence": 0.2905465066432953,
+        "bbox": [
+          881,
+          36,
+          939,
+          75
+        ],
+        "center": [
+          910,
+          55
+        ],
+        "area": 2262
+      }
+    ],
+    "detection_count": 4,
+    "timing": {
+      "preprocess": 0.0,
+      "inference": 141.12591743469238,
+      "postprocess": 0.4451274871826172,
+      "total": 141.5729522705078
+    },
+    "model_info": {
+      "weights": "yolov5s.pt",
+      "device": "cpu",
+      "conf_threshold": 0.25,
+      "iou_threshold": 0.45
+    }
+  }
+}
