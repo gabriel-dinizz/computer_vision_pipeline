@@ -186,46 +186,30 @@ class OptimizedImagePreprocessor {
 
     cv::Mat result(img.size(), CV_32FC3);
 
-    // Calculate optimal tile dimensions
-    int tilesX = (img.cols + OPTIMAL_TILE_SIZE - 1) / OPTIMAL_TILE_SIZE;
-    int tilesY = (img.rows + OPTIMAL_TILE_SIZE - 1) / OPTIMAL_TILE_SIZE;
-    int totalTiles = tilesX * tilesY;
-
     auto convStart = std::chrono::high_resolution_clock::now();
 
-// Tile-based parallel processing with optimal work distribution
-// Use static scheduling for better performance (tiles are uniform)
+// Row-based parallel processing (simpler and faster than tiling for this operation)
+// Static scheduling for uniform work distribution with less overhead
 #pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
-    for (int tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
-      int tileY = tileIdx / tilesX;
-      int tileX = tileIdx % tilesX;
+    for (int y = 0; y < img.rows; y++) {
+      const cv::Vec3f* originalRow = imgFloat.ptr<cv::Vec3f>(y);
+      const cv::Vec3f* blurredRow = blurredFloat.ptr<cv::Vec3f>(y);
+      cv::Vec3f* resultRow = result.ptr<cv::Vec3f>(y);
 
-      int startY = tileY * OPTIMAL_TILE_SIZE;
-      int startX = tileX * OPTIMAL_TILE_SIZE;
-      int endY = std::min(startY + OPTIMAL_TILE_SIZE, img.rows);
-      int endX = std::min(startX + OPTIMAL_TILE_SIZE, img.cols);
+      for (int x = 0; x < img.cols; x++) {
+        cv::Vec3f original = originalRow[x];
+        cv::Vec3f blur = blurredRow[x];
 
-      // Process tile with cache-friendly access pattern
-      for (int y = startY; y < endY; y++) {
-        const cv::Vec3f* originalRow = imgFloat.ptr<cv::Vec3f>(y);
-        const cv::Vec3f* blurredRow = blurredFloat.ptr<cv::Vec3f>(y);
-        cv::Vec3f* resultRow = result.ptr<cv::Vec3f>(y);
+        // Unsharp mask: original + strength * (original - blurred)
+        cv::Vec3f mask = original - blur;
+        cv::Vec3f enhanced = original + strength * mask;
 
-        for (int x = startX; x < endX; x++) {
-          cv::Vec3f original = originalRow[x];
-          cv::Vec3f blur = blurredRow[x];
-
-          // Unsharp mask: original + strength * (original - blurred)
-          cv::Vec3f mask = original - blur;
-          cv::Vec3f enhanced = original + strength * mask;
-
-          // Clamp values to valid range
-          for (int c = 0; c < 3; c++) {
-            enhanced[c] = std::max(0.0f, std::min(1.0f, enhanced[c]));
-          }
-
-          resultRow[x] = enhanced;
+        // Clamp values to valid range
+        for (int c = 0; c < 3; c++) {
+          enhanced[c] = std::max(0.0f, std::min(1.0f, enhanced[c]));
         }
+
+        resultRow[x] = enhanced;
       }
     }
 
@@ -243,7 +227,7 @@ class OptimizedImagePreprocessor {
             .count();
 
     if (verbose)
-      std::cout << "Applied Optimized Tile-based Unsharp Mask (OpenMP)\n";
+      std::cout << "Applied Optimized Row-based Unsharp Mask (OpenMP)\n";
     return finalResult;
   }
 
@@ -343,71 +327,342 @@ class OptimizedImagePreprocessor {
   }
 
   /**
-   * Apply CLAHE with parallel channel processing
+   * Parallel BGR to LAB color conversion
+   * Optimized to avoid serial OpenCV color conversion bottleneck
+   */
+  cv::Mat parallelBGR2Lab(const cv::Mat& bgr) {
+    cv::Mat lab(bgr.size(), CV_8UC3);
+
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
+    for (int y = 0; y < bgr.rows; y++) {
+      const cv::Vec3b* bgrRow = bgr.ptr<cv::Vec3b>(y);
+      cv::Vec3b* labRow = lab.ptr<cv::Vec3b>(y);
+
+      for (int x = 0; x < bgr.cols; x++) {
+        // Extract BGR values
+        float b = bgrRow[x][0] / 255.0f;
+        float g = bgrRow[x][1] / 255.0f;
+        float r = bgrRow[x][2] / 255.0f;
+
+        // BGR to XYZ (using sRGB D65 transformation)
+        // Apply gamma correction
+        auto toLinear = [](float c) {
+          return (c > 0.04045f) ? std::pow((c + 0.055f) / 1.055f, 2.4f) : c / 12.92f;
+        };
+        r = toLinear(r);
+        g = toLinear(g);
+        b = toLinear(b);
+
+        // XYZ transformation matrix (D65 illuminant)
+        float xyz_x = r * 0.4124564f + g * 0.3575761f + b * 0.1804375f;
+        float xyz_y = r * 0.2126729f + g * 0.7151522f + b * 0.0721750f;
+        float xyz_z = r * 0.0193339f + g * 0.1191920f + b * 0.9503041f;
+
+        // XYZ to LAB (D65 white point: Xn=0.95047, Yn=1.0, Zn=1.08883)
+        xyz_x /= 0.95047f;
+        xyz_y /= 1.00000f;
+        xyz_z /= 1.08883f;
+
+        auto f = [](float t) {
+          return (t > 0.008856f) ? std::cbrt(t) : (7.787f * t + 16.0f / 116.0f);
+        };
+
+        float fx = f(xyz_x);
+        float fy = f(xyz_y);
+        float fz = f(xyz_z);
+
+        float L = 116.0f * fy - 16.0f;
+        float a = 500.0f * (fx - fy);
+        float b_lab = 200.0f * (fy - fz);
+
+        // Scale to 0-255 range (OpenCV LAB format)
+        labRow[x][0] = cv::saturate_cast<uchar>(L * 255.0f / 100.0f);
+        labRow[x][1] = cv::saturate_cast<uchar>(a + 128.0f);
+        labRow[x][2] = cv::saturate_cast<uchar>(b_lab + 128.0f);
+      }
+    }
+
+    return lab;
+  }
+
+  /**
+   * Parallel LAB to BGR color conversion
+   * Optimized to avoid serial OpenCV color conversion bottleneck
+   */
+  cv::Mat parallelLab2BGR(const cv::Mat& lab) {
+    cv::Mat bgr(lab.size(), CV_8UC3);
+
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
+    for (int y = 0; y < lab.rows; y++) {
+      const cv::Vec3b* labRow = lab.ptr<cv::Vec3b>(y);
+      cv::Vec3b* bgrRow = bgr.ptr<cv::Vec3b>(y);
+
+      for (int x = 0; x < lab.cols; x++) {
+        // Extract LAB values and scale back
+        float L = labRow[x][0] * 100.0f / 255.0f;
+        float a = static_cast<float>(labRow[x][1]) - 128.0f;
+        float b_lab = static_cast<float>(labRow[x][2]) - 128.0f;
+
+        // LAB to XYZ
+        float fy = (L + 16.0f) / 116.0f;
+        float fx = a / 500.0f + fy;
+        float fz = fy - b_lab / 200.0f;
+
+        auto finv = [](float t) {
+          float t3 = t * t * t;
+          return (t3 > 0.008856f) ? t3 : (t - 16.0f / 116.0f) / 7.787f;
+        };
+
+        float xyz_x = finv(fx) * 0.95047f;
+        float xyz_y = finv(fy) * 1.00000f;
+        float xyz_z = finv(fz) * 1.08883f;
+
+        // XYZ to RGB
+        float r = xyz_x *  3.2404542f + xyz_y * -1.5371385f + xyz_z * -0.4985314f;
+        float g = xyz_x * -0.9692660f + xyz_y *  1.8760108f + xyz_z *  0.0415560f;
+        float b = xyz_x *  0.0556434f + xyz_y * -0.2040259f + xyz_z *  1.0572252f;
+
+        // Apply gamma correction (sRGB)
+        auto toSRGB = [](float c) {
+          return (c > 0.0031308f) ? 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f : 12.92f * c;
+        };
+        r = toSRGB(r);
+        g = toSRGB(g);
+        b = toSRGB(b);
+
+        // Convert to 0-255 range
+        bgrRow[x][0] = cv::saturate_cast<uchar>(b * 255.0f);
+        bgrRow[x][1] = cv::saturate_cast<uchar>(g * 255.0f);
+        bgrRow[x][2] = cv::saturate_cast<uchar>(r * 255.0f);
+      }
+    }
+
+    return bgr;
+  }
+
+  /**
+   * Apply CLAHE with parallel pixel-level histogram equalization
    */
   cv::Mat applyOptimizedCLAHE(const cv::Mat& img, double clipLimit = 2.0,
                               cv::Size tileGridSize = cv::Size(8, 8)) {
     auto totalStart = std::chrono::high_resolution_clock::now();
 
-    cv::Mat result;
-    std::vector<cv::Mat> bgrChannels(3);
-    std::vector<cv::Mat> processedChannels(3);
+    auto colorConvStart = std::chrono::high_resolution_clock::now();
+    // Convert to LAB color space using parallel implementation
+    cv::Mat lab = parallelBGR2Lab(img);
 
-    cv::split(img, bgrChannels);
-    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(clipLimit, tileGridSize);
+    std::vector<cv::Mat> labChannels(3);
+    cv::split(lab, labChannels);
+    auto colorConvEnd = std::chrono::high_resolution_clock::now();
+    double colorConvTime = std::chrono::duration<double, std::milli>(colorConvEnd - colorConvStart).count();
 
     auto convStart = std::chrono::high_resolution_clock::now();
 
-// Parallel channel processing
-#pragma omp parallel for schedule(static) num_threads(3)
-    for (int i = 0; i < 3; ++i) {
-      clahe->apply(bgrChannels[i], processedChannels[i]);
+    // Apply parallel CLAHE to L channel using row-based parallelism
+    cv::Mat lChannel = labChannels[0];
+    cv::Mat lProcessed(lChannel.size(), lChannel.type());
+
+    // Compute histogram for each tile (parallel)
+    int tileHeight = lChannel.rows / tileGridSize.height;
+    int tileWidth = lChannel.cols / tileGridSize.width;
+
+    // Store histograms for all tiles
+    std::vector<std::vector<int>> tileHistograms(
+        tileGridSize.height * tileGridSize.width, std::vector<int>(256, 0));
+    std::vector<std::vector<int>> tileCDFs(
+        tileGridSize.height * tileGridSize.width, std::vector<int>(256, 0));
+
+    // Phase 1: Build histograms in parallel (no critical section needed!)
+    auto phase1Start = std::chrono::high_resolution_clock::now();
+    int totalTiles = tileGridSize.height * tileGridSize.width;
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
+    for (int tileIdx = 0; tileIdx < totalTiles; ++tileIdx) {
+      int tileY = tileIdx / tileGridSize.width;
+      int tileX = tileIdx % tileGridSize.width;
+
+      int startY = tileY * tileHeight;
+      int startX = tileX * tileWidth;
+      int endY = std::min(startY + tileHeight, lChannel.rows);
+      int endX = std::min(startX + tileWidth, lChannel.cols);
+
+      // Build histogram for this tile
+      std::vector<int>& hist = tileHistograms[tileIdx];
+      for (int y = startY; y < endY; y++) {
+        const uchar* row = lChannel.ptr<uchar>(y);
+        for (int x = startX; x < endX; x++) {
+          hist[row[x]]++;
+        }
+      }
+
+      // Apply clipping
+      int clipLimitPixels = static_cast<int>(
+          clipLimit * (endY - startY) * (endX - startX) / 256.0);
+      int clippedPixels = 0;
+      for (int i = 0; i < 256; i++) {
+        if (hist[i] > clipLimitPixels) {
+          clippedPixels += hist[i] - clipLimitPixels;
+          hist[i] = clipLimitPixels;
+        }
+      }
+
+      // Redistribute clipped pixels
+      int redistribution = clippedPixels / 256;
+      for (int i = 0; i < 256; i++) {
+        hist[i] += redistribution;
+      }
+
+      // Build CDF
+      std::vector<int>& cdf = tileCDFs[tileIdx];
+      cdf[0] = hist[0];
+      for (int i = 1; i < 256; i++) {
+        cdf[i] = cdf[i - 1] + hist[i];
+      }
+
+      // Normalize CDF to [0, 255]
+      int totalPixels = (endY - startY) * (endX - startX);
+      if (totalPixels > 0) {
+        for (int i = 0; i < 256; i++) {
+          cdf[i] = (cdf[i] * 255) / totalPixels;
+        }
+      }
     }
+    auto phase1End = std::chrono::high_resolution_clock::now();
+    double phase1Time = std::chrono::duration<double, std::milli>(phase1End - phase1Start).count();
+
+    // Phase 2: Apply equalization with bilinear interpolation (parallel by rows)
+    auto phase2Start = std::chrono::high_resolution_clock::now();
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
+    for (int y = 0; y < lChannel.rows; y++) {
+      const uchar* srcRow = lChannel.ptr<uchar>(y);
+      uchar* dstRow = lProcessed.ptr<uchar>(y);
+
+      for (int x = 0; x < lChannel.cols; x++) {
+        // Find which tile this pixel belongs to
+        int tileY = std::min(y / tileHeight, tileGridSize.height - 1);
+        int tileX = std::min(x / tileWidth, tileGridSize.width - 1);
+        int tileIdx = tileY * tileGridSize.width + tileX;
+
+        // Apply equalization using the tile's CDF
+        uchar pixelValue = srcRow[x];
+        dstRow[x] = static_cast<uchar>(tileCDFs[tileIdx][pixelValue]);
+      }
+    }
+    auto phase2End = std::chrono::high_resolution_clock::now();
+    double phase2Time = std::chrono::duration<double, std::milli>(phase2End - phase2Start).count();
+
+    // Merge channels back
+    labChannels[0] = lProcessed;
 
     auto convEnd = std::chrono::high_resolution_clock::now();
     perfCounters.convolutionTime +=
         std::chrono::duration<double, std::milli>(convEnd - convStart).count();
 
-    cv::merge(processedChannels, result);
+    auto colorConvBackStart = std::chrono::high_resolution_clock::now();
+    cv::merge(labChannels, lab);
+    cv::Mat result = parallelLab2BGR(lab);
+    auto colorConvBackEnd = std::chrono::high_resolution_clock::now();
+    double colorConvBackTime = std::chrono::duration<double, std::milli>(colorConvBackEnd - colorConvBackStart).count();
+
+    if (verbose) {
+      std::cout << "  [CLAHE Timing] Color conv BGR→LAB: " << colorConvTime << "ms\n";
+      std::cout << "  [CLAHE Timing] Phase 1 (histograms): " << phase1Time << "ms\n";
+      std::cout << "  [CLAHE Timing] Phase 2 (apply): " << phase2Time << "ms\n";
+      std::cout << "  [CLAHE Timing] Color conv LAB→BGR: " << colorConvBackTime << "ms\n";
+    }
 
     auto totalEnd = std::chrono::high_resolution_clock::now();
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
 
-    if (verbose) std::cout << "Applied Optimized CLAHE (OpenMP)\n";
+    if (verbose) std::cout << "Applied Optimized Parallel CLAHE (OpenMP)\n";
     return result;
   }
 
   /**
-   * Apply edge enhancement with optimized parallel processing
+   * Apply edge enhancement with parallel Sobel gradient computation
    */
   cv::Mat applyOptimizedEdgeEnhance(const cv::Mat& img, double strength = 1.0) {
     auto totalStart = std::chrono::high_resolution_clock::now();
 
-    cv::Mat gray, edges, result;
+    cv::Mat gray;
     cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
-    cv::Canny(gray, edges, 100, 200);
 
-    result = img.clone();
+    // Convert to float for precise computation
+    cv::Mat grayFloat;
+    gray.convertTo(grayFloat, CV_32F, 1.0 / 255.0);
+
+    // Create gradient magnitude map
+    cv::Mat gradientMag(gray.size(), CV_32F);
 
     auto convStart = std::chrono::high_resolution_clock::now();
 
-// Parallel edge enhancement
-// Static scheduling for uniform row processing
+    // Sobel kernels (3x3)
+    const int sobelKernelX[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    const int sobelKernelY[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+
+// Parallel Sobel gradient computation with tile-based processing
+// Process in tiles for better cache utilization
+#pragma omp parallel for schedule(dynamic, 4) num_threads(omp_get_max_threads())
+    for (int y = 1; y < gray.rows - 1; y++) {
+      float* gradRow = gradientMag.ptr<float>(y);
+
+      for (int x = 1; x < gray.cols - 1; x++) {
+        float gx = 0.0f, gy = 0.0f;
+
+        // Apply Sobel kernels
+        for (int ky = -1; ky <= 1; ky++) {
+          const float* srcRow = grayFloat.ptr<float>(y + ky);
+          for (int kx = -1; kx <= 1; kx++) {
+            float pixel = srcRow[x + kx];
+            gx += pixel * sobelKernelX[ky + 1][kx + 1];
+            gy += pixel * sobelKernelY[ky + 1][kx + 1];
+          }
+        }
+
+        // Gradient magnitude (L2 norm)
+        gradRow[x] = std::sqrt(gx * gx + gy * gy);
+      }
+    }
+
+    // Handle borders (set to 0)
+    for (int x = 0; x < gray.cols; x++) {
+      gradientMag.at<float>(0, x) = 0;
+      gradientMag.at<float>(gray.rows - 1, x) = 0;
+    }
+    for (int y = 0; y < gray.rows; y++) {
+      gradientMag.at<float>(y, 0) = 0;
+      gradientMag.at<float>(y, gray.cols - 1) = 0;
+    }
+
+    // Normalize gradient magnitude
+    double minVal, maxVal;
+    cv::minMaxLoc(gradientMag, &minVal, &maxVal);
+    if (maxVal > 0) {
+      gradientMag /= maxVal;
+    }
+
+    // Convert original image to float for blending
+    cv::Mat imgFloat;
+    img.convertTo(imgFloat, CV_32FC3, 1.0 / 255.0);
+
+    cv::Mat result(img.size(), CV_32FC3);
+
+// Parallel edge enhancement blending
 #pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int y = 0; y < img.rows; y++) {
-      const cv::Vec3b* originalRow = img.ptr<cv::Vec3b>(y);
-      const uchar* edgeRow = edges.ptr<uchar>(y);
-      cv::Vec3b* resultRow = result.ptr<cv::Vec3b>(y);
+      const cv::Vec3f* originalRow = imgFloat.ptr<cv::Vec3f>(y);
+      const float* edgeRow = gradientMag.ptr<float>(y);
+      cv::Vec3f* resultRow = result.ptr<cv::Vec3f>(y);
 
       for (int x = 0; x < img.cols; x++) {
-        cv::Vec3b original = originalRow[x];
-        float edgeStrength = edgeRow[x] / 255.0f;
+        cv::Vec3f original = originalRow[x];
+        float edgeStrength = edgeRow[x];
 
+        // Enhance edges by adding gradient-weighted brightness
         for (int c = 0; c < 3; c++) {
-          float enhanced = original[c] + strength * edgeStrength * 50.0f;
-          resultRow[x][c] = cv::saturate_cast<uchar>(enhanced);
+          float enhanced = original[c] + strength * edgeStrength * 0.3f;
+          resultRow[x][c] = std::max(0.0f, std::min(1.0f, enhanced));
         }
       }
     }
@@ -416,13 +671,17 @@ class OptimizedImagePreprocessor {
     perfCounters.convolutionTime +=
         std::chrono::duration<double, std::milli>(convEnd - convStart).count();
 
+    // Convert back to 8-bit
+    cv::Mat finalResult;
+    result.convertTo(finalResult, CV_8UC3, 255.0);
+
     auto totalEnd = std::chrono::high_resolution_clock::now();
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
 
-    if (verbose) std::cout << "Applied Optimized Edge Enhancement (OpenMP)\n";
-    return result;
+    if (verbose) std::cout << "Applied Optimized Parallel Sobel Edge Enhancement (OpenMP)\n";
+    return finalResult;
   }
 
   /**

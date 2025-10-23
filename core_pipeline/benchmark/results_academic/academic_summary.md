@@ -1,7 +1,7 @@
 # OpenMP Computer Vision Pipeline - Academic Benchmark Results
 
 **Test Image:** ../images/sample.jpg
-**Timestamp:** 2025-10-21 18:08:18
+**Timestamp:** 2025-10-22 22:51:44
 **Iterations per test:** 10
 
 ## Executive Summary
@@ -12,17 +12,17 @@ This benchmark validates the performance impact of OpenMP parallelization in com
 
 | Filter | 1 Thread (ms) | 8 Threads (ms) | Speedup | Efficiency |
 |--------|---------------|----------------|---------|------------|
-| Blur | 7.4 | 3.7 | 2.00x | 0.25 |
-| Sharpen | 10.0 | 4.9 | 2.04x | 0.26 |
-| Denoise | 122.1 | 32.9 | 3.71x | 0.46 |
-| Clahe | 1.4 | 1.0 | 1.40x | 0.17 |
-| Edge | 3.0 | 2.0 | 1.50x | 0.19 |
+| Blur | 13.4 | 5.1 | 2.63x | 0.33 |
+| Sharpen | 16.5 | 7.8 | 2.12x | 0.26 |
+| Denoise | 214.7 | 49.8 | 4.31x | 0.54 |
+| Clahe | 53.0 | 14.5 | 3.66x | 0.46 |
+| Edge | 7.6 | 5.5 | 1.38x | 0.17 |
 
 ## Key Findings
 
-- **Average 8-thread speedup:** 2.13x
-- **Average 8-thread efficiency:** 0.27
-- **Performance gain:** 113.0% improvement with 8 threads
+- **Average 8-thread speedup:** 2.82x
+- **Average 8-thread efficiency:** 0.35
+- **Performance gain:** 181.8% improvement with 8 threads
 
 ## Research Validation
 
