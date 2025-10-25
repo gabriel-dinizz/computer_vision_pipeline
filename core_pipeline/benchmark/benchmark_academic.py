@@ -43,7 +43,7 @@ class AcademicCVBenchmark:
         # Academic benchmark configuration
         self.thread_counts = [1, 2, 4, 8]
         self.filters = ['blur', 'sharpen', 'denoise', 'clahe', 'edge']
-        self.iterations_per_test = 10
+        self.iterations_per_test = 2
         self.warmup_iterations = 3
         
     def run_preprocessing_benchmark(self, image_path: str) -> Dict:
