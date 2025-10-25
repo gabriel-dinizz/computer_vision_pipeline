@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 # Add python directory to path for imports
-sys.path.append(str(Path(__file__).parent / "python"))
+sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from pipeline_integration import CVPipeline
 from yolo_detector import YOLODetector

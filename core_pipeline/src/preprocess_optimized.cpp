@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
@@ -20,13 +21,214 @@ enum class FilterType {
   EDGE_ENHANCE
 };
 
+// Convert FilterType to string for logging
+inline std::string filterTypeToString(FilterType type) {
+  switch (type) {
+    case FilterType::GAUSSIAN_BLUR: return "Gaussian Blur";
+    case FilterType::UNSHARP_MASK: return "Unsharp Mask";
+    case FilterType::LAPLACIAN_SHARPEN: return "Laplacian Sharpen";
+    case FilterType::BILATERAL_DENOISE: return "Bilateral Denoise";
+    case FilterType::CLAHE_ENHANCE: return "CLAHE";
+    case FilterType::EDGE_ENHANCE: return "Edge Enhancement";
+    default: return "Unknown";
+  }
+}
+
+/**
+ * Comprehensive image quality metrics
+ * Phase 1: Foundation for intelligent filter selection
+ */
+struct ImageQualityMetrics {
+  // Basic metrics
+  double blurVariance;        // Laplacian variance (>100 = sharp)
+  double brightness;          // Mean brightness (0-255)
+  double noiseLevel;          // Estimated noise level
+
+  // Advanced metrics
+  double contrast;            // Standard deviation of brightness
+  double dynamicRange;        // Actual intensity range used (0-1)
+  bool hasHistogramClipping;  // Over/underexposure detection
+
+  // Image dimensions
+  int width;
+  int height;
+
+  // Severity assessment
+  bool isSeverelyDegraded() const {
+    return (brightness < 30 || brightness > 220) ||
+           (blurVariance < 50 && noiseLevel > 15) ||
+           (dynamicRange < 0.3);
+  }
+
+  bool isExtremelyDark() const {
+    return brightness < 30;
+  }
+
+  bool isExtremelyBright() const {
+    return brightness > 220;
+  }
+
+  bool isVeryBlurry() const {
+    return blurVariance < 50;
+  }
+
+  bool isVeryNoisy() const {
+    return noiseLevel > 20;
+  }
+
+  bool hasLowContrast() const {
+    return contrast < 30 || dynamicRange < 0.3;
+  }
+};
+
+/**
+ * Represents a single filter operation with parameters
+ * Phase 2: Building block for filter pipelines
+ */
+struct FilterOperation {
+  FilterType type;
+  std::map<std::string, double> parameters;
+  std::string reason;  // Why this filter was selected
+
+  FilterOperation(FilterType t, std::map<std::string, double> p, std::string r)
+      : type(t), parameters(std::move(p)), reason(std::move(r)) {}
+};
+
+/**
+ * Manages a sequence of filter operations
+ * Phase 2: Composable filter pipeline
+ */
+class FilterPipeline {
+private:
+  std::vector<FilterOperation> operations;
+  std::string pipelineName;
+
+public:
+  FilterPipeline() : pipelineName("Custom Pipeline") {}
+  explicit FilterPipeline(std::string name) : pipelineName(std::move(name)) {}
+
+  void addFilter(FilterType type, std::map<std::string, double> params,
+                 const std::string& reason) {
+    operations.emplace_back(type, std::move(params), reason);
+  }
+
+  const std::vector<FilterOperation>& getOperations() const {
+    return operations;
+  }
+
+  void clear() {
+    operations.clear();
+  }
+
+  bool isEmpty() const {
+    return operations.empty();
+  }
+
+  size_t size() const {
+    return operations.size();
+  }
+
+  const std::string& getName() const {
+    return pipelineName;
+  }
+
+  // Factory methods for common degradation scenarios
+  static FilterPipeline createSevereDarkPipeline() {
+    FilterPipeline pipeline("Severe Dark Recovery");
+    pipeline.addFilter(FilterType::CLAHE_ENHANCE,
+                      {{"clipLimit", 3.0}, {"tileSize", 8}},
+                      "Severe darkness - aggressive contrast enhancement");
+    pipeline.addFilter(FilterType::EDGE_ENHANCE,
+                      {{"strength", 1.2}},
+                      "Post-CLAHE edge recovery for detail restoration");
+    return pipeline;
+  }
+
+  static FilterPipeline createSevereBrightPipeline() {
+    FilterPipeline pipeline("Severe Bright Recovery");
+    pipeline.addFilter(FilterType::CLAHE_ENHANCE,
+                      {{"clipLimit", 2.5}, {"tileSize", 8}},
+                      "Overexposure correction");
+    pipeline.addFilter(FilterType::EDGE_ENHANCE,
+                      {{"strength", 1.0}},
+                      "Edge recovery after exposure correction");
+    return pipeline;
+  }
+
+  static FilterPipeline createNoisyBlurPipeline() {
+    FilterPipeline pipeline("Noisy & Blurry Recovery");
+    pipeline.addFilter(FilterType::BILATERAL_DENOISE,
+                      {{"d", 9}, {"sigmaColor", 75}, {"sigmaSpace", 75}},
+                      "Denoise while preserving edges");
+    pipeline.addFilter(FilterType::UNSHARP_MASK,
+                      {{"sigma", 1.0}, {"strength", 1.5}},
+                      "Sharpen after denoising");
+    return pipeline;
+  }
+
+  static FilterPipeline createLowContrastPipeline() {
+    FilterPipeline pipeline("Low Contrast Recovery");
+    pipeline.addFilter(FilterType::CLAHE_ENHANCE,
+                      {{"clipLimit", 2.0}, {"tileSize", 8}},
+                      "Adaptive contrast enhancement");
+    return pipeline;
+  }
+
+  static FilterPipeline createStandardPipeline(FilterType singleFilter) {
+    FilterPipeline pipeline("Single Filter");
+    std::map<std::string, double> defaultParams;
+
+    switch (singleFilter) {
+      case FilterType::GAUSSIAN_BLUR:
+        defaultParams = {{"sigma", 2.0}};  // Increased from 1.0 for better parallelization
+        break;
+      case FilterType::UNSHARP_MASK:
+        defaultParams = {{"sigma", 2.0}, {"strength", 1.5}};  // Increased from 1.0
+        break;
+      case FilterType::BILATERAL_DENOISE:
+        defaultParams = {{"d", 9}, {"sigmaColor", 75}, {"sigmaSpace", 75}};
+        break;
+      case FilterType::CLAHE_ENHANCE:
+        defaultParams = {{"clipLimit", 2.0}, {"tileSize", 8}};
+        break;
+      case FilterType::EDGE_ENHANCE:
+        defaultParams = {{"strength", 1.0}};
+        break;
+      default:
+        defaultParams = {};
+    }
+
+    pipeline.addFilter(singleFilter, defaultParams, "User selected");
+    return pipeline;
+  }
+};
+
+/**
+ * Configuration for preprocessing behavior
+ * Phase 5: Observability and control
+ */
+struct PreprocessingConfig {
+  bool enableMultiFilter = true;        // Enable multi-filter pipelines
+  bool saveIntermediateResults = false; // Save intermediate images for debugging
+  int maxPipelineStages = 3;            // Prevent runaway pipelines
+  std::string intermediateDir = "./debug/";
+
+  enum class Strategy {
+    CONSERVATIVE,  // Minimal processing
+    BALANCED,      // Default - intelligent multi-filter
+    AGGRESSIVE     // Maximum quality improvement
+  };
+  Strategy strategy = Strategy::BALANCED;
+};
+
 /**
  * Optimized ImagePreprocessor with proper OpenMP implementations
- * Fixes fundamental algorithmic issues with custom parallel convolution
+ * Now supports intelligent multi-filter pipelines for severely degraded images
  */
 class OptimizedImagePreprocessor {
  private:
   bool verbose;
+  PreprocessingConfig config;
 
   // Performance counters
   struct PerformanceCounters {
@@ -41,6 +243,16 @@ class OptimizedImagePreprocessor {
 
   mutable PerformanceCounters perfCounters;
 
+  // Pipeline performance tracking (Phase 4)
+  struct StagePerformance {
+    FilterType filter;
+    double processingTime;
+    std::string reason;
+    int threadsUsed;
+  };
+
+  std::vector<StagePerformance> pipelinePerformance;
+
   // Optimal tile sizes for cache efficiency
   static constexpr int CACHE_LINE_SIZE = 64;
   static constexpr int OPTIMAL_TILE_SIZE = 64;  // 64x64 fits L1 cache
@@ -48,7 +260,8 @@ class OptimizedImagePreprocessor {
       CACHE_LINE_SIZE / sizeof(cv::Vec3b);
 
  public:
-  OptimizedImagePreprocessor(bool verbose = true) : verbose(verbose) {}
+  OptimizedImagePreprocessor(bool verbose = true, PreprocessingConfig cfg = PreprocessingConfig())
+      : verbose(verbose), config(std::move(cfg)) {}
 
   /**
    * Generate 1D Gaussian kernel for separable convolution
@@ -225,6 +438,7 @@ class OptimizedImagePreprocessor {
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
+    perfCounters.threadsUsed = omp_get_max_threads();
 
     if (verbose)
       std::cout << "Applied Optimized Row-based Unsharp Mask (OpenMP)\n";
@@ -319,6 +533,7 @@ class OptimizedImagePreprocessor {
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
+    perfCounters.threadsUsed = omp_get_max_threads();
 
     if (verbose)
       std::cout
@@ -574,6 +789,7 @@ class OptimizedImagePreprocessor {
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
+    perfCounters.threadsUsed = omp_get_max_threads();
 
     if (verbose) std::cout << "Applied Optimized Parallel CLAHE (OpenMP)\n";
     return result;
@@ -601,9 +817,9 @@ class OptimizedImagePreprocessor {
     const int sobelKernelX[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     const int sobelKernelY[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
-// Parallel Sobel gradient computation with tile-based processing
-// Process in tiles for better cache utilization
-#pragma omp parallel for schedule(dynamic, 4) num_threads(omp_get_max_threads())
+// Parallel Sobel gradient computation
+// Use static scheduling for uniform row processing
+#pragma omp parallel for schedule(static) num_threads(omp_get_max_threads())
     for (int y = 1; y < gray.rows - 1; y++) {
       float* gradRow = gradientMag.ptr<float>(y);
 
@@ -679,15 +895,21 @@ class OptimizedImagePreprocessor {
     perfCounters.totalTime +=
         std::chrono::duration<double, std::milli>(totalEnd - totalStart)
             .count();
+    perfCounters.threadsUsed = omp_get_max_threads();
 
     if (verbose) std::cout << "Applied Optimized Parallel Sobel Edge Enhancement (OpenMP)\n";
     return finalResult;
   }
 
   /**
-   * Assess image quality and suggest appropriate filter
+   * Phase 1: Comprehensive image quality analysis
+   * Returns detailed metrics for intelligent filter selection
    */
-  FilterType assessImageQuality(const cv::Mat& img) {
+  ImageQualityMetrics analyzeImage(const cv::Mat& img) const {
+    ImageQualityMetrics metrics;
+    metrics.width = img.cols;
+    metrics.height = img.rows;
+
     cv::Mat gray;
     cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
 
@@ -696,11 +918,13 @@ class OptimizedImagePreprocessor {
     cv::Laplacian(gray, laplacian, CV_64F);
     cv::Scalar mean, stddev;
     cv::meanStdDev(laplacian, mean, stddev);
-    double variance = stddev.val[0] * stddev.val[0];
+    metrics.blurVariance = stddev.val[0] * stddev.val[0];
 
-    // Calculate brightness
-    cv::Scalar meanBrightness = cv::mean(gray);
-    double brightness = meanBrightness.val[0];
+    // Calculate brightness and contrast
+    cv::Scalar meanBrightness, stddevBrightness;
+    cv::meanStdDev(gray, meanBrightness, stddevBrightness);
+    metrics.brightness = meanBrightness.val[0];
+    metrics.contrast = stddevBrightness.val[0];
 
     // Calculate noise level
     cv::Mat noise, diff;
@@ -713,62 +937,253 @@ class OptimizedImagePreprocessor {
 
     cv::Scalar noiseMean, noiseStd;
     cv::meanStdDev(diff, noiseMean, noiseStd);
-    double noiseLevel = noiseStd.val[0];
+    metrics.noiseLevel = noiseStd.val[0];
 
-    if (verbose) {
-      std::cout << "Image Quality Assessment:\n";
-      std::cout << "  Blur variance: " << std::fixed << std::setprecision(1)
-                << variance << " (>100 = sharp, <100 = blurry)\n";
-      std::cout << "  Brightness: " << std::fixed << std::setprecision(1)
-                << brightness << " (0-255)\n";
-      std::cout << "  Noise level: " << std::fixed << std::setprecision(1)
-                << noiseLevel << "\n";
+    // Calculate dynamic range
+    double minVal, maxVal;
+    cv::minMaxLoc(gray, &minVal, &maxVal);
+    metrics.dynamicRange = (maxVal - minVal) / 255.0;
+
+    // Detect histogram clipping (over/underexposure)
+    std::vector<int> histogram(256, 0);
+    for (int y = 0; y < gray.rows; y++) {
+      const uchar* row = gray.ptr<uchar>(y);
+      for (int x = 0; x < gray.cols; x++) {
+        histogram[row[x]]++;
+      }
     }
 
-    // Decision logic
-    if (variance < 100) {
-      std::cout
-          << "  Recommendation: Image appears blurry - applying sharpening\n";
-      return FilterType::UNSHARP_MASK;
-    } else if (noiseLevel > 15) {
-      std::cout
-          << "  Recommendation: Image appears noisy - applying denoising\n";
-      return FilterType::BILATERAL_DENOISE;
-    } else if (brightness < 50 || brightness > 200) {
-      std::cout << "  Recommendation: Poor contrast - applying CLAHE\n";
-      return FilterType::CLAHE_ENHANCE;
-    } else {
-      std::cout
-          << "  Recommendation: Good quality - applying edge enhancement\n";
-      return FilterType::EDGE_ENHANCE;
-    }
+    int totalPixels = gray.rows * gray.cols;
+    int clippedPixels = histogram[0] + histogram[255];
+    metrics.hasHistogramClipping = (clippedPixels > totalPixels * 0.01);
+
+    return metrics;
   }
 
   /**
-   * Apply the optimized filter based on type
+   * Phase 3: Intelligent pipeline selection based on degradation profile
+   * Maps image quality metrics to optimal filter pipelines
    */
-  cv::Mat processImage(const cv::Mat& img,
-                       FilterType filter = FilterType::GAUSSIAN_BLUR) {
-    // Reset performance counters
-    perfCounters = PerformanceCounters();
+  FilterPipeline selectOptimalPipeline(const ImageQualityMetrics& metrics) const {
+    if (verbose) {
+      std::cout << "\n=== Image Quality Analysis ===\n";
+      std::cout << "Brightness: " << std::fixed << std::setprecision(1)
+                << metrics.brightness;
+      if (metrics.isExtremelyDark())
+        std::cout << " (SEVERE - extremely dark)";
+      else if (metrics.isExtremelyBright())
+        std::cout << " (SEVERE - extremely bright)";
+      else if (metrics.brightness < 50 || metrics.brightness > 200)
+        std::cout << " (poor)";
+      std::cout << "\n";
 
+      std::cout << "Blur Variance: " << metrics.blurVariance;
+      if (metrics.isVeryBlurry())
+        std::cout << " (SEVERE - very blurry)";
+      else if (metrics.blurVariance < 100)
+        std::cout << " (moderate blur)";
+      std::cout << "\n";
+
+      std::cout << "Noise Level: " << metrics.noiseLevel;
+      if (metrics.isVeryNoisy())
+        std::cout << " (SEVERE - very noisy)";
+      else if (metrics.noiseLevel > 15)
+        std::cout << " (moderate noise)";
+      std::cout << "\n";
+
+      std::cout << "Contrast: " << metrics.contrast;
+      if (metrics.hasLowContrast())
+        std::cout << " (low)";
+      std::cout << "\n";
+
+      std::cout << "Dynamic Range: " << std::fixed << std::setprecision(2)
+                << metrics.dynamicRange;
+      if (metrics.dynamicRange < 0.3)
+        std::cout << " (poor)";
+      std::cout << "\n";
+
+      if (metrics.hasHistogramClipping) {
+        std::cout << "Histogram clipping detected (over/underexposure)\n";
+      }
+    }
+
+    // Multi-filter mode enabled and severely degraded image
+    if (config.enableMultiFilter && metrics.isSeverelyDegraded()) {
+      if (verbose) {
+        std::cout << "Assessment: SEVERELY_DEGRADED\n";
+        std::cout << "\n=== Pipeline Selection ===\n";
+        std::cout << "Strategy: ";
+        switch (config.strategy) {
+          case PreprocessingConfig::Strategy::CONSERVATIVE:
+            std::cout << "CONSERVATIVE\n";
+            break;
+          case PreprocessingConfig::Strategy::BALANCED:
+            std::cout << "BALANCED\n";
+            break;
+          case PreprocessingConfig::Strategy::AGGRESSIVE:
+            std::cout << "AGGRESSIVE\n";
+            break;
+        }
+      }
+
+      // Priority 1: Extreme darkness
+      if (metrics.isExtremelyDark()) {
+        auto pipeline = FilterPipeline::createSevereDarkPipeline();
+        if (verbose) {
+          std::cout << "Selected: " << pipeline.getName() << " ("
+                    << pipeline.size() << " stages)\n";
+          int stage = 1;
+          for (const auto& op : pipeline.getOperations()) {
+            std::cout << "  Stage " << stage++ << ": "
+                      << filterTypeToString(op.type) << " - " << op.reason
+                      << "\n";
+          }
+        }
+        return pipeline;
+      }
+
+      // Priority 2: Extreme brightness
+      if (metrics.isExtremelyBright()) {
+        auto pipeline = FilterPipeline::createSevereBrightPipeline();
+        if (verbose) {
+          std::cout << "Selected: " << pipeline.getName() << " ("
+                    << pipeline.size() << " stages)\n";
+          int stage = 1;
+          for (const auto& op : pipeline.getOperations()) {
+            std::cout << "  Stage " << stage++ << ": "
+                      << filterTypeToString(op.type) << " - " << op.reason
+                      << "\n";
+          }
+        }
+        return pipeline;
+      }
+
+      // Priority 3: Noisy AND blurry
+      if (metrics.isVeryBlurry() && metrics.noiseLevel > 15) {
+        auto pipeline = FilterPipeline::createNoisyBlurPipeline();
+        if (verbose) {
+          std::cout << "Selected: " << pipeline.getName() << " ("
+                    << pipeline.size() << " stages)\n";
+          int stage = 1;
+          for (const auto& op : pipeline.getOperations()) {
+            std::cout << "  Stage " << stage++ << ": "
+                      << filterTypeToString(op.type) << " - " << op.reason
+                      << "\n";
+          }
+        }
+        return pipeline;
+      }
+
+      // Priority 4: Low contrast/dynamic range
+      if (metrics.hasLowContrast()) {
+        auto pipeline = FilterPipeline::createLowContrastPipeline();
+        if (verbose) {
+          std::cout << "Selected: " << pipeline.getName() << " ("
+                    << pipeline.size() << " stages)\n";
+          for (const auto& op : pipeline.getOperations()) {
+            std::cout << "  Stage 1: " << filterTypeToString(op.type) << " - "
+                      << op.reason << "\n";
+          }
+        }
+        return pipeline;
+      }
+    }
+
+    // Single filter fallback (existing logic)
+    if (verbose) {
+      std::cout << "Assessment: STANDARD\n";
+      std::cout << "\n=== Filter Selection ===\n";
+    }
+
+    FilterType selectedFilter;
+    if (metrics.blurVariance < 100) {
+      if (verbose)
+        std::cout << "Selected: Unsharp Mask - Image appears blurry\n";
+      selectedFilter = FilterType::UNSHARP_MASK;
+    } else if (metrics.noiseLevel > 15) {
+      if (verbose)
+        std::cout << "Selected: Bilateral Denoise - Image appears noisy\n";
+      selectedFilter = FilterType::BILATERAL_DENOISE;
+    } else if (metrics.brightness < 50 || metrics.brightness > 200) {
+      if (verbose)
+        std::cout << "Selected: CLAHE - Poor contrast detected\n";
+      selectedFilter = FilterType::CLAHE_ENHANCE;
+    } else {
+      if (verbose)
+        std::cout
+            << "Selected: Edge Enhancement - Good quality, light processing\n";
+      selectedFilter = FilterType::EDGE_ENHANCE;
+    }
+
+    return FilterPipeline::createStandardPipeline(selectedFilter);
+  }
+
+  /**
+   * Backwards compatibility: Assess image quality and suggest single filter
+   * Now wraps the new analyzeImage + selectOptimalPipeline methods
+   */
+  FilterType assessImageQuality(const cv::Mat& img) {
+    auto metrics = analyzeImage(img);
+
+    // Force single-filter mode for backwards compatibility
+    bool originalMultiFilter = config.enableMultiFilter;
+    config.enableMultiFilter = false;
+
+    auto pipeline = selectOptimalPipeline(metrics);
+
+    config.enableMultiFilter = originalMultiFilter;
+
+    // Return the first (and only) filter from the pipeline
+    if (!pipeline.isEmpty()) {
+      return pipeline.getOperations()[0].type;
+    }
+
+    return FilterType::EDGE_ENHANCE;  // Fallback
+  }
+
+  /**
+   * Phase 4: Helper method to apply a single filter with parameters
+   */
+  cv::Mat applySingleFilter(const cv::Mat& img, FilterType type,
+                           const std::map<std::string, double>& params) {
     cv::Mat result;
-    switch (filter) {
-      case FilterType::GAUSSIAN_BLUR:
-        result = applyOptimizedGaussianBlur(img);
+
+    // Helper to get parameter with default
+    auto getParam = [&params](const std::string& key, double defaultVal) {
+      auto it = params.find(key);
+      return (it != params.end()) ? it->second : defaultVal;
+    };
+
+    switch (type) {
+      case FilterType::GAUSSIAN_BLUR: {
+        double sigma = getParam("sigma", 2.0);  // Increased from 1.0 for better parallelization
+        result = applyOptimizedGaussianBlur(img, sigma);
         break;
-      case FilterType::UNSHARP_MASK:
-        result = applyOptimizedUnsharpMask(img);
+      }
+      case FilterType::UNSHARP_MASK: {
+        double sigma = getParam("sigma", 2.0);  // Increased from 1.0 for better parallelization
+        double strength = getParam("strength", 1.5);
+        result = applyOptimizedUnsharpMask(img, sigma, strength);
         break;
-      case FilterType::BILATERAL_DENOISE:
-        result = applyOptimizedBilateralFilter(img);
+      }
+      case FilterType::BILATERAL_DENOISE: {
+        int d = static_cast<int>(getParam("d", 9));
+        double sigmaColor = getParam("sigmaColor", 75);
+        double sigmaSpace = getParam("sigmaSpace", 75);
+        result = applyOptimizedBilateralFilter(img, d, sigmaColor, sigmaSpace);
         break;
-      case FilterType::CLAHE_ENHANCE:
-        result = applyOptimizedCLAHE(img);
+      }
+      case FilterType::CLAHE_ENHANCE: {
+        double clipLimit = getParam("clipLimit", 2.0);
+        int tileSize = static_cast<int>(getParam("tileSize", 8));
+        result = applyOptimizedCLAHE(img, clipLimit, cv::Size(tileSize, tileSize));
         break;
-      case FilterType::EDGE_ENHANCE:
-        result = applyOptimizedEdgeEnhance(img);
+      }
+      case FilterType::EDGE_ENHANCE: {
+        double strength = getParam("strength", 1.0);
+        result = applyOptimizedEdgeEnhance(img, strength);
         break;
+      }
       default:
         result = applyOptimizedGaussianBlur(img);
     }
@@ -777,9 +1192,149 @@ class OptimizedImagePreprocessor {
   }
 
   /**
-   * Get detailed performance analysis
+   * Phase 4: Execute complete filter pipeline with performance tracking
+   * This is the core of the multi-filter preprocessing system
+   */
+  cv::Mat processPipeline(const cv::Mat& img, const FilterPipeline& pipeline) {
+    pipelinePerformance.clear();
+    cv::Mat result = img.clone();
+
+    if (verbose) {
+      std::cout << "\n=== Pipeline Execution ===\n";
+      std::cout << "Pipeline: " << pipeline.getName() << " (" << pipeline.size()
+                << " stage" << (pipeline.size() != 1 ? "s" : "") << ")\n";
+    }
+
+    int stageNum = 1;
+    for (const auto& op : pipeline.getOperations()) {
+      if (stageNum > config.maxPipelineStages) {
+        if (verbose) {
+          std::cout << "Warning: Reached maximum pipeline stages ("
+                    << config.maxPipelineStages << "), stopping early\n";
+        }
+        break;
+      }
+
+      auto stageStart = std::chrono::high_resolution_clock::now();
+
+      // Reset performance counters for this stage
+      perfCounters = PerformanceCounters();
+
+      // Apply filter with parameters
+      result = applySingleFilter(result, op.type, op.parameters);
+
+      auto stageEnd = std::chrono::high_resolution_clock::now();
+      double stageTime = std::chrono::duration<double, std::milli>(
+                            stageEnd - stageStart).count();
+
+      // Record stage performance
+      pipelinePerformance.push_back({op.type, stageTime, op.reason,
+                                    perfCounters.threadsUsed});
+
+      // Save intermediate result if debugging
+      if (config.saveIntermediateResults) {
+        std::string intermediatePath = config.intermediateDir +
+                                      "stage_" + std::to_string(stageNum) + "_" +
+                                      filterTypeToString(op.type) + ".jpg";
+        cv::imwrite(intermediatePath, result);
+      }
+
+      if (verbose) {
+        std::cout << "[Stage " << stageNum << "] "
+                  << filterTypeToString(op.type) << ": " << std::fixed
+                  << std::setprecision(2) << stageTime << "ms";
+        if (perfCounters.threadsUsed > 1) {
+          std::cout << " (" << perfCounters.threadsUsed << " threads)";
+        }
+        std::cout << " - " << op.reason << "\n";
+      }
+
+      stageNum++;
+    }
+
+    return result;
+  }
+
+  /**
+   * Convenience method: Auto-process with intelligent pipeline selection
+   */
+  cv::Mat processImageAuto(const cv::Mat& img) {
+    auto metrics = analyzeImage(img);
+    auto pipeline = selectOptimalPipeline(metrics);
+    return processPipeline(img, pipeline);
+  }
+
+  /**
+   * Apply the optimized filter based on type (backwards compatibility)
+   */
+  cv::Mat processImage(const cv::Mat& img,
+                       FilterType filter = FilterType::GAUSSIAN_BLUR) {
+    // Reset performance counters
+    perfCounters = PerformanceCounters();
+    pipelinePerformance.clear();
+
+    // Use the new pipeline-based approach internally
+    auto pipeline = FilterPipeline::createStandardPipeline(filter);
+    return processPipeline(img, pipeline);
+  }
+
+  /**
+   * Phase 5: Enhanced pipeline performance reporting
+   */
+  void printPipelinePerformance() const {
+    if (!verbose) return;
+
+    if (pipelinePerformance.empty()) {
+      return;
+    }
+
+    std::cout << "\n=== Pipeline Performance Summary ===\n";
+
+    double totalTime = 0.0;
+    int maxThreads = 1;
+
+    for (const auto& stage : pipelinePerformance) {
+      totalTime += stage.processingTime;
+      maxThreads = std::max(maxThreads, stage.threadsUsed);
+    }
+
+    std::cout << "Total pipeline time: " << std::fixed << std::setprecision(2)
+              << totalTime << " ms (" << pipelinePerformance.size()
+              << " stage" << (pipelinePerformance.size() != 1 ? "s" : "")
+              << ")\n";
+    std::cout << "Max threads used: " << maxThreads << "\n";
+
+    std::cout << "\nPer-stage breakdown:\n";
+    for (size_t i = 0; i < pipelinePerformance.size(); i++) {
+      const auto& stage = pipelinePerformance[i];
+      double percentage = (stage.processingTime / totalTime) * 100.0;
+
+      std::cout << "  Stage " << (i + 1) << " ("
+                << filterTypeToString(stage.filter) << "): " << std::fixed
+                << std::setprecision(2) << stage.processingTime << " ms ("
+                << std::setprecision(1) << percentage << "%)";
+
+      if (stage.threadsUsed > 1) {
+        std::cout << " [" << stage.threadsUsed << " threads]";
+      }
+
+      std::cout << "\n";
+    }
+
+    std::cout << "============================\n";
+  }
+
+  /**
+   * Get detailed performance analysis (legacy single-filter)
    */
   void printPerformanceAnalysis() const {
+    // If pipeline performance is available, use the enhanced reporting
+    if (!pipelinePerformance.empty()) {
+      printPipelinePerformance();
+      return;
+    }
+
+    // Legacy single-filter reporting
     if (verbose) {
       std::cout << "\n=== Performance Analysis ===\n";
       std::cout << "Total processing time: " << std::fixed
@@ -802,23 +1357,39 @@ class OptimizedImagePreprocessor {
   const PerformanceCounters& getPerformanceCounters() const {
     return perfCounters;
   }
+
+  const std::vector<StagePerformance>& getPipelinePerformance() const {
+    return pipelinePerformance;
+  }
 };
 
 int main(int argc, char** argv) {
   if (argc < 3) {
     std::cerr << "Usage: " << argv[0]
-              << " <input_img> <output_img> [filter_type] [auto_assess]\n";
-    std::cerr
-        << "Filter types: blur, sharpen, laplacian, denoise, clahe, edge\n";
-    std::cerr
-        << "Auto assess: use 'auto' to automatically choose best filter\n";
+              << " <input_img> <output_img> [filter_type] [options]\n";
+    std::cerr << "\nFilter types:\n";
+    std::cerr << "  blur, sharpen, denoise, clahe, edge\n";
+    std::cerr << "  auto - Intelligent multi-filter pipeline (default)\n";
+    std::cerr << "\nOptions:\n";
+    std::cerr << "  --single - Force single-filter mode (disable multi-filter)\n";
+    std::cerr << "\nExamples:\n";
+    std::cerr << "  " << argv[0] << " input.jpg output.jpg auto\n";
+    std::cerr << "  " << argv[0] << " input.jpg output.jpg clahe --single\n";
     return 1;
   }
 
   std::string in = argv[1], out = argv[2];
   std::string filterStr = (argc > 3) ? argv[3] : "auto";
-  bool autoAssess =
-      (filterStr == "auto") || (argc > 4 && std::string(argv[4]) == "auto");
+  bool forceSingleFilter = false;
+
+  // Check for --single flag
+  for (int i = 4; i < argc; i++) {
+    if (std::string(argv[i]) == "--single") {
+      forceSingleFilter = true;
+    }
+  }
+
+  bool autoAssess = (filterStr == "auto");
 
   // Load image
   cv::Mat img = cv::imread(in, cv::IMREAD_COLOR);
@@ -832,19 +1403,24 @@ int main(int argc, char** argv) {
 
   auto start = std::chrono::high_resolution_clock::now();
 
-  OptimizedImagePreprocessor processor(true);
-  FilterType selectedFilter;
+  // Configure processor
+  PreprocessingConfig config;
+  config.enableMultiFilter = !forceSingleFilter;
+  config.strategy = PreprocessingConfig::Strategy::BALANCED;
+
+  OptimizedImagePreprocessor processor(true, config);
+  cv::Mat processed;
 
   if (autoAssess) {
-    selectedFilter = processor.assessImageQuality(img);
+    // Use intelligent auto-processing with multi-filter support
+    processed = processor.processImageAuto(img);
   } else {
     // Manual filter selection
+    FilterType selectedFilter;
     if (filterStr == "blur")
       selectedFilter = FilterType::GAUSSIAN_BLUR;
     else if (filterStr == "sharpen")
       selectedFilter = FilterType::UNSHARP_MASK;
-    else if (filterStr == "laplacian")
-      selectedFilter = FilterType::LAPLACIAN_SHARPEN;
     else if (filterStr == "denoise")
       selectedFilter = FilterType::BILATERAL_DENOISE;
     else if (filterStr == "clahe")
@@ -853,10 +1429,9 @@ int main(int argc, char** argv) {
       selectedFilter = FilterType::EDGE_ENHANCE;
     else
       selectedFilter = FilterType::GAUSSIAN_BLUR;
-  }
 
-  // Apply selected filter
-  cv::Mat processed = processor.processImage(img, selectedFilter);
+    processed = processor.processImage(img, selectedFilter);
+  }
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration =
@@ -873,7 +1448,7 @@ int main(int argc, char** argv) {
   numThreads = omp_get_max_threads();
 #endif
 
-  std::cout << "=== Processing Complete ===\n";
+  std::cout << "\n=== Processing Complete ===\n";
   std::cout << "Output: " << out << "\n";
   std::cout << "Total processing time: " << duration.count() << " ms\n";
   std::cout << "Max threads available: " << numThreads << "\n";
@@ -881,7 +1456,7 @@ int main(int argc, char** argv) {
   // Show detailed performance analysis
   processor.printPerformanceAnalysis();
 
-  std::cout << "Ready for YOLO detection!\n";
+  std::cout << "\nReady for YOLO detection!\n";
 
   return 0;
 }

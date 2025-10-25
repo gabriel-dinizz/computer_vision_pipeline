@@ -1,213 +1,324 @@
-# Supports macOS (clang + libomp) and Linux (g++)
+# ============================================================================
+# Computer Vision Pipeline - Unified Makefile
+# ============================================================================
+# Purpose: Build OpenMP-optimized image preprocessing + YOLO detection pipeline
+# Author:  TCC Project - Computer Vision Pipeline with Parallel Processing
+# ============================================================================
 
-# Detect OS
+# ============================================================================
+# PLATFORM DETECTION AND COMPILER CONFIGURATION
+# ============================================================================
 UNAME_S := $(shell uname -s)
 
+# macOS Configuration
 ifeq ($(UNAME_S),Darwin)
-    # macOS with Homebrew
     CXX := clang++
     BREW_PREFIX := $(shell brew --prefix)
+    # macOS requires -Xpreprocessor flag for OpenMP
     OMP_CFLAGS := -Xpreprocessor -fopenmp -I$(BREW_PREFIX)/opt/libomp/include
     OMP_LIBS   := -L$(BREW_PREFIX)/opt/libomp/lib -lomp -Wl,-rpath,$(BREW_PREFIX)/opt/libomp/lib
 else
-    # Linux
+    # Linux Configuration
     CXX := g++
     OMP_CFLAGS := -fopenmp
     OMP_LIBS   := -fopenmp
 endif
 
-OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
-OPENCV_LIBS   := $(shell pkg-config --libs opencv4)
+# ============================================================================
+# OPENCV CONFIGURATION
+# ============================================================================
+# Auto-detect OpenCV installation via pkg-config
+OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null || pkg-config --cflags opencv)
+OPENCV_LIBS   := $(shell pkg-config --libs opencv4 2>/dev/null || pkg-config --libs opencv)
 
-# If opencv4 is not found, try opencv
-ifeq ($(OPENCV_CFLAGS),)
-    OPENCV_CFLAGS := $(shell pkg-config --cflags opencv)
-    OPENCV_LIBS   := $(shell pkg-config --libs opencv)
-endif
-
+# ============================================================================
+# COMPILER FLAGS
+# ============================================================================
+# -std=c++17    : Use C++17 standard features
+# -O3           : Maximum optimization for performance
+# -Wall -Wextra : Enable comprehensive warnings for code quality
 CXXFLAGS := -std=c++17 -O3 -Wall -Wextra $(OPENCV_CFLAGS) $(OMP_CFLAGS)
 LDFLAGS  := $(OPENCV_LIBS) $(OMP_LIBS)
 
-# Source files
-SRC_DIR := src
-FILTER_SRC_DIR := $(SRC_DIR)/filter_convolution_algorithms
-BIN_DIR := bin
-TEMP_DIR := temp
+# ============================================================================
+# PROJECT DIRECTORY STRUCTURE
+# ============================================================================
+CORE_DIR := core_pipeline
+SRC_DIR := $(CORE_DIR)/src
+BIN_DIR := $(CORE_DIR)/bin
+TEMP_DIR := $(CORE_DIR)/temp
+PYTHON_DIR := $(CORE_DIR)/python
+BENCHMARK_DIR := $(CORE_DIR)/benchmark
+IMAGES_DIR := $(CORE_DIR)/images
 
-# Main preprocessing binary
-PREPROCESS_SRC := $(SRC_DIR)/preprocess.cpp
-PREPROCESS_BIN := $(BIN_DIR)/preprocess
-
-# Filter algorithm binaries
-GAUSSIAN_SRC := $(FILTER_SRC_DIR)/gaussian_blur.cpp
-GAUSSIAN_BIN := $(BIN_DIR)/gaussian_blur
-
-# Python files
-PYTHON_DIR := python
-PIPELINE_SCRIPT := $(PYTHON_DIR)/pipeline.py
-
-# Research-specific binaries
-SEQUENTIAL_SRC := $(SRC_DIR)/sequential_baseline.cpp
-SEQUENTIAL_BIN := $(BIN_DIR)/sequential_baseline
-
-OPENCV_BASELINE_SRC := $(SRC_DIR)/opencv_baseline.cpp
-OPENCV_BASELINE_BIN := $(BIN_DIR)/opencv_baseline
-
-# Optimized preprocessing binary
+# ============================================================================
+# BUILD TARGETS
+# ============================================================================
 PREPROCESS_OPTIMIZED_SRC := $(SRC_DIR)/preprocess_optimized.cpp
 PREPROCESS_OPTIMIZED_BIN := $(BIN_DIR)/preprocess_optimized
 
-.PHONY: all clean test install-deps help run-pipeline build-filters research-all research-benchmark research-report optimized
+# ============================================================================
+# PHONY TARGETS
+# ============================================================================
+.PHONY: all clean test benchmark install-deps pipeline help run-custom assess detect-only
 
-# All targets including research components
-all: $(PREPROCESS_BIN) $(SEQUENTIAL_BIN) $(OPENCV_BASELINE_BIN) $(PREPROCESS_OPTIMIZED_BIN)
+# ============================================================================
+# TARGET: all (default)
+# ============================================================================
+# Purpose: Build the optimized preprocessing binary
+# Usage:   make
+#          make all
+all: $(PREPROCESS_OPTIMIZED_BIN)
+	@echo "✓ Build complete! Use 'make help' for usage information."
 
-preprocess: $(PREPROCESS_BIN)
-sequential_baseline: $(SEQUENTIAL_BIN)
-opencv_baseline: $(OPENCV_BASELINE_BIN)
-optimized: $(PREPROCESS_OPTIMIZED_BIN)
-
-# Research targets
-research-all: $(PREPROCESS_BIN) $(SEQUENTIAL_BIN) $(OPENCV_BASELINE_BIN) $(PREPROCESS_OPTIMIZED_BIN) build-filters
-
-# Sequential baseline binary
-$(SEQUENTIAL_BIN): $(SEQUENTIAL_SRC)
-	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "Built sequential baseline: $@"
-
-# OpenCV baseline binary
-$(OPENCV_BASELINE_BIN): $(OPENCV_BASELINE_SRC)
-	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "Built OpenCV baseline: $@"
-
-# Main preprocessing binary
-$(PREPROCESS_BIN): $(PREPROCESS_SRC)
-	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "Built enhanced preprocessing pipeline: $@"
-
-# Optimized preprocessing binary
+# Main build rule for optimized preprocessing binary
 $(PREPROCESS_OPTIMIZED_BIN): $(PREPROCESS_OPTIMIZED_SRC)
+	@echo "Building optimized preprocessing pipeline..."
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "Built optimized OpenMP preprocessing pipeline: $@"
+	@echo "✓ Built: $@"
 
-# Build filter algorithms
-build-filters:
-	@echo "Building filter convolution algorithms..."
-	@cd $(FILTER_SRC_DIR) && $(MAKE) all
-	@echo "Filter algorithms built successfully"
-
-# Test the preprocessing pipeline
-test: $(PREPROCESS_BIN)
-	@echo "Testing preprocessing pipeline..."
-	@mkdir -p $(TEMP_DIR)
-	@if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then \
-		echo "Testing with sample image..."; \
-		./$(PREPROCESS_BIN) images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg $(TEMP_DIR)/test_output.jpg auto; \
-	else \
-		echo "Sample image not found. Please add an image to the images/ directory."; \
-	fi
-
-# Run the full Python pipeline
-run-pipeline: $(PREPROCESS_BIN)
-	@echo "Running full computer vision pipeline..."
-	@if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then \
-		cd python && python3 pipeline.py ../images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg -v; \
-	else \
-		echo "Sample image not found. Usage: make run-pipeline IMAGE=path/to/image.jpg"; \
-	fi
-
-# Run pipeline with custom image
-run-custom:
-	@if [ -z "$(IMAGE)" ]; then \
-		echo "Usage: make run-custom IMAGE=path/to/image.jpg"; \
-		exit 1; \
-	fi
-	cd python && python3 pipeline.py $(IMAGE) -v
-
-# Install Python dependencies
+# ============================================================================
+# TARGET: install-deps
+# ============================================================================
+# Purpose: Install all required Python dependencies
+# Installs: PyTorch, Ultralytics (YOLO), OpenCV, NumPy, Matplotlib, Pandas
 install-deps:
 	@echo "Installing Python dependencies..."
-	pip3 install opencv-python numpy torch torchvision
-	@echo "Downloading YOLOv5 weights..."
-	@cd python && python3 -c "import torch; torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)"
+	pip3 install torch torchvision torchaudio ultralytics opencv-python numpy matplotlib seaborn pandas
+	@echo "✓ Dependencies installed successfully"
 
-# Assessment only
-assess:
+# ============================================================================
+# TARGET: test
+# ============================================================================
+# Purpose: Quick test of preprocessing pipeline with sample image
+# Input:   Expects core_pipeline/images/sample.jpg to exist
+# Output:  core_pipeline/temp/test_output.jpg
+test: $(PREPROCESS_OPTIMIZED_BIN)
+	@echo "Testing preprocessing pipeline..."
+	@mkdir -p $(TEMP_DIR)
+	@if [ -f "$(IMAGES_DIR)/sample.jpg" ]; then \
+		echo "Testing with sample image..."; \
+		./$(PREPROCESS_OPTIMIZED_BIN) $(IMAGES_DIR)/sample.jpg $(TEMP_DIR)/test_output.jpg auto; \
+		echo "✓ Test completed - output: $(TEMP_DIR)/test_output.jpg"; \
+	else \
+		echo "Sample image not found. Looking for any .jpg in $(IMAGES_DIR)/..."; \
+		IMAGE=$$(find $(IMAGES_DIR) -name "*.jpg" -o -name "*.jpeg" | head -1); \
+		if [ -n "$$IMAGE" ]; then \
+			echo "Testing with: $$IMAGE"; \
+			./$(PREPROCESS_OPTIMIZED_BIN) $$IMAGE $(TEMP_DIR)/test_output.jpg auto; \
+			echo "✓ Test completed - output: $(TEMP_DIR)/test_output.jpg"; \
+		else \
+			echo "Error: No images found in $(IMAGES_DIR)/"; \
+			echo "Please add a .jpg image to test with."; \
+		fi; \
+	fi
+
+# ============================================================================
+# TARGET: pipeline
+# ============================================================================
+# Purpose: Run complete end-to-end computer vision pipeline
+# Usage:   make pipeline IMAGE=path/to/image.jpg
+#          OMP_NUM_THREADS=4 make pipeline IMAGE=core_pipeline/images/sample.jpg
+# Steps:   1. C++ preprocessing (OpenMP parallelized)
+#          2. YOLO object detection
+pipeline: $(PREPROCESS_OPTIMIZED_BIN)
+	@if [ -z "$(IMAGE)" ]; then \
+		echo "Usage: make pipeline IMAGE=path/to/image.jpg"; \
+		echo "Example: make pipeline IMAGE=core_pipeline/images/sample.jpg"; \
+		exit 1; \
+	fi
+	@echo "============================================================"
+	@echo "Running Computer Vision Pipeline"
+	@echo "============================================================"
+	@echo "Step 1: Preprocessing image with OpenMP optimization..."
+	@mkdir -p $(TEMP_DIR)
+	./$(PREPROCESS_OPTIMIZED_BIN) $(IMAGE) $(TEMP_DIR)/preprocessed.jpg auto
+	@echo ""
+	@echo "Step 2: Running YOLO object detection..."
+	cd $(PYTHON_DIR) && python3 yolo_detector.py ../temp/preprocessed.jpg --save -o ../temp/detection_results
+	@echo ""
+	@echo "✓ Pipeline completed successfully!"
+	@echo "Results saved in: $(TEMP_DIR)/detection_results/"
+	@echo "============================================================"
+
+# ============================================================================
+# TARGET: run-custom
+# ============================================================================
+# Purpose: Run pipeline with custom image (alternative syntax)
+run-custom: pipeline
+
+# ============================================================================
+# TARGET: assess
+# ============================================================================
+# Purpose: Assess image quality only (no detection)
+assess: $(PREPROCESS_OPTIMIZED_BIN)
 	@if [ -z "$(IMAGE)" ]; then \
 		echo "Usage: make assess IMAGE=path/to/image.jpg"; \
 		exit 1; \
 	fi
-	cd python && python3 pipeline.py $(IMAGE) --assess-only
-
-# Performance benchmark
-benchmark: $(PREPROCESS_BIN)
-	@echo "Running performance benchmark..."
+	@echo "Assessing image quality..."
 	@mkdir -p $(TEMP_DIR)
-	@if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then \
-		echo "Testing different filters..."; \
-		for filter in blur sharpen denoise clahe edge; do \
-			echo "Testing $$filter filter..."; \
-			time ./$(PREPROCESS_BIN) images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg $(TEMP_DIR)/test_$$filter.jpg $$filter; \
-		done; \
+	./$(PREPROCESS_OPTIMIZED_BIN) $(IMAGE) $(TEMP_DIR)/assessed.jpg auto
+	@echo "✓ Assessment complete - output: $(TEMP_DIR)/assessed.jpg"
+
+# ============================================================================
+# TARGET: detect-only
+# ============================================================================
+# Purpose: Run YOLO detection only (skip preprocessing)
+# Usage:   make detect-only IMAGE=path/to/image.jpg
+#          make detect-only IMAGE=core_pipeline/images/car.jpg
+#          make detect-only IMAGE=/absolute/path/to/image.jpg
+detect-only:
+	@if [ -z "$(IMAGE)" ]; then \
+		echo "Usage: make detect-only IMAGE=path/to/image.jpg"; \
+		echo "Example: make detect-only IMAGE=core_pipeline/images/car.jpg"; \
+		exit 1; \
+	fi
+	@echo "============================================================"
+	@echo "Running YOLO Object Detection (No Preprocessing)"
+	@echo "============================================================"
+	@echo "Input: $(IMAGE)"
+	@mkdir -p $(TEMP_DIR)
+	@# Convert to absolute path to handle both relative and absolute inputs
+	@IMAGE_ABS=$$(cd $$(dirname "$(IMAGE)") 2>/dev/null && pwd)/$$(basename "$(IMAGE)") || IMAGE_ABS="$(IMAGE)"; \
+	cd $(PYTHON_DIR) && python3 yolo_detector.py "$$IMAGE_ABS" --save -o ../temp/detection_results
+	@echo ""
+	@echo "✓ Detection completed successfully!"
+	@echo "Results saved in: $(TEMP_DIR)/detection_results/"
+	@echo "============================================================"
+
+# ============================================================================
+# TARGET: benchmark
+# ============================================================================
+# Purpose: Run comprehensive academic performance benchmark
+# Usage:   make benchmark
+#          make benchmark IMAGE=core_pipeline/images/sample.jpg
+# Output:  Results in core_pipeline/benchmark/results_academic/
+benchmark: $(PREPROCESS_OPTIMIZED_BIN)
+	@echo "Running academic benchmark..."
+	@mkdir -p $(BENCHMARK_DIR)
+	@if [ -d "$(BENCHMARK_DIR)" ] && [ -f "$(BENCHMARK_DIR)/benchmark_academic.py" ]; then \
+		cd $(BENCHMARK_DIR) && python3 benchmark_academic.py $(if $(IMAGE),--image $(IMAGE),); \
+		echo "✓ Benchmark completed - results in $(BENCHMARK_DIR)/results_academic/"; \
 	else \
-		echo "Sample image not found for benchmark."; \
+		echo "Running basic performance benchmark..."; \
+		mkdir -p $(TEMP_DIR); \
+		IMAGE_FILE=$(if $(IMAGE),$(IMAGE),$$(find $(IMAGES_DIR) -name "*.jpg" -o -name "*.jpeg" | head -1)); \
+		if [ -n "$$IMAGE_FILE" ]; then \
+			echo "Testing filters with: $$IMAGE_FILE"; \
+			for filter in blur sharpen denoise clahe edge auto; do \
+				echo ""; \
+				echo "Testing $$filter filter..."; \
+				time ./$(PREPROCESS_OPTIMIZED_BIN) $$IMAGE_FILE $(TEMP_DIR)/bench_$$filter.jpg $$filter; \
+			done; \
+			echo "✓ Basic benchmark completed - outputs in $(TEMP_DIR)/"; \
+		else \
+			echo "Error: No image specified and none found in $(IMAGES_DIR)/"; \
+		fi; \
 	fi
 
-# Run academic research benchmark
-research-benchmark: research-all
-	@echo "Running academic research benchmark..."
-	@if [ -f "images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg" ]; then \
-		python3 research_benchmark_academic.py; \
-	else \
-		echo "Sample image not found for research benchmark."; \
-	fi
-
-# Generate research report
-research-report: research-benchmark
-	@echo "Generating academic research report..."
-	@echo "Results available in research_results/ directory"
-
-# Validate research reproducibility
-research-validate: research-all
-	@echo "Validating research reproducibility..."
-	@python3 -c "import research_benchmark_academic; b = research_benchmark_academic.OpenMPResearchBenchmark(iterations=10); b.run_complete_research_study('images/2019_Toyota_Corolla_Icon_Tech_VVT-i_Hybrid_1.8.jpg')"
-
+# ============================================================================
+# TARGET: clean
+# ============================================================================
+# Purpose: Remove all build artifacts and temporary files
 clean:
-	rm -rf $(BIN_DIR) $(TEMP_DIR)
-	@cd $(FILTER_SRC_DIR) && $(MAKE) clean
-	@echo "Cleaned all build files"
+	@echo "Cleaning build files..."
+	rm -rf $(BIN_DIR) $(TEMP_DIR) $(BENCHMARK_DIR)/results_*
+	@echo "✓ Cleaned successfully"
 
+# ============================================================================
+# TARGET: help
+# ============================================================================
+# Purpose: Display comprehensive usage information
 help:
-	@echo "Computer Vision Pipeline - Available targets:"
-	@echo "  all                    - Build preprocessing binary and filter algorithms"
-	@echo "  research-all           - Build all binaries including research baselines"
-	@echo "  research-benchmark     - Run complete academic research benchmark"
-	@echo "  research-report        - Generate academic research report"
-	@echo "  research-validate      - Validate research reproducibility"
-	@echo "  test                   - Test preprocessing with sample image"
-	@echo "  run-pipeline           - Run full Python pipeline with YOLO detection"
-	@echo "  run-custom             - Run pipeline with custom image (make run-custom IMAGE=path)"
-	@echo "  assess                 - Assess image quality only (make assess IMAGE=path)"
-	@echo "  benchmark              - Run performance benchmark"
-	@echo "  install-deps           - Install Python dependencies and download YOLO weights"
-	@echo "  build-filters          - Build filter convolution algorithms separately"
-	@echo "  clean                  - Remove all build files"
-	@echo "  help                   - Show this help message"
+	@echo "============================================================================"
+	@echo "Computer Vision Pipeline - Makefile Help"
+	@echo "============================================================================"
+	@echo "TCC Project: OpenMP-Optimized Image Preprocessing + YOLO Detection"
 	@echo ""
-	@echo "Research Examples:"
-	@echo "  make research-benchmark          # Run complete academic study"
-	@echo "  make research-validate           # Quick reproducibility check"
-	@echo "  make research-report             # Generate final report"
+	@echo "QUICK START:"
+	@echo "  make                                    # Build preprocessing binary"
+	@echo "  make pipeline IMAGE=path/to/image.jpg   # Run full pipeline"
 	@echo ""
-	@echo "Examples:"
-	@echo "  make run-custom IMAGE=images/my_photo.jpg"
-	@echo "  make assess IMAGE=images/blurry_photo.jpg"
+	@echo "AVAILABLE TARGETS:"
+	@echo "  all           Build C++ preprocessing binary (default)"
+	@echo "  install-deps  Install Python dependencies (PyTorch, YOLO, etc.)"
+	@echo "  test          Test preprocessing with sample image"
+	@echo "  pipeline      Run full pipeline (preprocessing + YOLO detection)"
+	@echo "  detect-only   Run YOLO detection only (skip preprocessing)"
+	@echo "  assess        Assess image quality only (no detection)"
+	@echo "  benchmark     Run performance benchmarks"
+	@echo "  clean         Remove build artifacts and temporary files"
+	@echo "  help          Show this help message"
 	@echo ""
-	@echo "Requirements:"
-	@echo "  - OpenCV library (brew install opencv on macOS)"
-	@echo "  - OpenMP library (brew install libomp on macOS)"
-	@echo "  - Python 3 with pip"
+	@echo "DETAILED USAGE:"
+	@echo ""
+	@echo "  1. First-time setup:"
+	@echo "     $$ make install-deps    # Install Python dependencies"
+	@echo "     $$ make all             # Build C++ binary"
+	@echo ""
+	@echo "  2. Run pipeline on an image:"
+	@echo "     $$ make pipeline IMAGE=core_pipeline/images/sample.jpg"
+	@echo ""
+	@echo "  3. Run YOLO detection only (skip preprocessing):"
+	@echo "     $$ make detect-only IMAGE=core_pipeline/images/car.jpg"
+	@echo ""
+	@echo "  4. Control thread count (for performance testing):"
+	@echo "     $$ OMP_NUM_THREADS=1 make pipeline IMAGE=image.jpg  # Single-threaded"
+	@echo "     $$ OMP_NUM_THREADS=4 make pipeline IMAGE=image.jpg  # 4 threads"
+	@echo "     $$ OMP_NUM_THREADS=8 make pipeline IMAGE=image.jpg  # 8 threads"
+	@echo ""
+	@echo "  5. Run benchmarks (for academic analysis):"
+	@echo "     $$ make benchmark"
+	@echo "     $$ make benchmark IMAGE=core_pipeline/images/sample.jpg"
+	@echo ""
+	@echo "  6. Quick quality assessment:"
+	@echo "     $$ make assess IMAGE=core_pipeline/images/blurry_photo.jpg"
+	@echo ""
+	@echo "PIPELINE FLOW:"
+	@echo "  Input Image → C++ Preprocessing (OpenMP) → YOLO Detection → Results"
+	@echo ""
+	@echo "AVAILABLE FILTERS:"
+	@echo "  - blur      : Gaussian blur (noise reduction)"
+	@echo "  - sharpen   : Unsharp mask (enhance details)"
+	@echo "  - denoise   : Bilateral filter (preserve edges)"
+	@echo "  - clahe     : Contrast enhancement"
+	@echo "  - edge      : Edge enhancement"
+	@echo "  - auto      : Automatic selection (default, recommended)"
+	@echo ""
+	@echo "REQUIREMENTS:"
+	@echo "  C++ Dependencies:"
+	@echo "    - OpenCV 4.x    : brew install opencv (macOS)"
+	@echo "    - OpenMP        : brew install libomp (macOS)"
+	@echo "    - C++17 compiler: clang++ (macOS) / g++ (Linux)"
+	@echo ""
+	@echo "  Python Dependencies (install with 'make install-deps'):"
+	@echo "    - Python 3.8+"
+	@echo "    - PyTorch, Ultralytics (YOLO), OpenCV, NumPy, Matplotlib, Pandas"
+	@echo ""
+	@echo "PROJECT STRUCTURE:"
+	@echo "  core_pipeline/"
+	@echo "    ├── src/              C++ source code"
+	@echo "    ├── bin/              Compiled binaries"
+	@echo "    ├── python/           YOLO detection scripts"
+	@echo "    ├── images/           Input images"
+	@echo "    ├── temp/             Temporary outputs"
+	@echo "    └── benchmark/        Performance benchmarks"
+	@echo ""
+	@echo "EXAMPLES:"
+	@echo "  # Full pipeline (preprocessing + detection)"
+	@echo "  make pipeline IMAGE=core_pipeline/images/car.jpg"
+	@echo ""
+	@echo "  # Detection only (no preprocessing)"
+	@echo "  make detect-only IMAGE=core_pipeline/images/car.jpg"
+	@echo ""
+	@echo "  # Performance comparison"
+	@echo "  OMP_NUM_THREADS=1 make pipeline IMAGE=test.jpg"
+	@echo "  OMP_NUM_THREADS=8 make pipeline IMAGE=test.jpg"
+	@echo ""
+	@echo "  # Academic benchmark"
+	@echo "  make benchmark IMAGE=core_pipeline/images/sample.jpg"
+	@echo ""
+	@echo "For more information, see core_pipeline/README.md"
+	@echo "============================================================================"

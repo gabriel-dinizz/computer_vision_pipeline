@@ -484,7 +484,7 @@ def main():
         description="Academic CV Pipeline Benchmark"
     )
     parser.add_argument(
-        "--image", default="../images/sample.jpg", help="Test image path"
+        "--image", default="../images/sample_4.jpg", help="Test image path"
     )
     parser.add_argument(
         "--preprocess-bin",

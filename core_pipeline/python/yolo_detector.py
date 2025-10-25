@@ -268,12 +268,18 @@ def main():
             save_results=args.save,
             output_dir=args.output or "runs/detect/standalone"
         )
-        
+
+        # Check for errors
+        if "error" in results:
+            print(f"\n=== Detection Failed ===")
+            print(f"Error: {results['error']}")
+            sys.exit(1)
+
         print(f"\n=== Detection Results ===")
         print(f"Image: {results['image_path']}")
         print(f"Detections: {results['detection_count']}")
         print(f"Total time: {results['timing']['total']:.1f} ms")
-        
+
         if results['detections']:
             print("\nDetected objects:")
             for i, det in enumerate(results['detections']):
