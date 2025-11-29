@@ -17,8 +17,8 @@ benchmark/
 ├── results_academic/             # Resultados gerados (criado após execução)
 │   ├── complete_results.json    # Dados brutos completos
 │   ├── academic_summary.md      # Relatório formatado
-│   ├── preprocessing_performance.png  # Gráfico de performance
-│   └── speedup_analysis.png     # Gráfico de speedup e eficiência
+│   ├── preprocessing_performance.svg  # Gráfico de performance (vetorizado)
+│   └── speedup_analysis.svg     # Gráfico de speedup e eficiência (vetorizado)
 └── README.md                     # Esta documentação
 ```
 
@@ -328,9 +328,9 @@ benchmark.generate_academic_report(results, "image.jpg")
 
 **Arquivos gerados:**
 
-#### a. `preprocessing_performance.png`
+#### a. `preprocessing_performance.svg`
 
-Gráfico de performance de preprocessamento (2×3 subplots):
+Gráfico de performance de preprocessamento (2×3 subplots, formato vetorizado):
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -355,11 +355,11 @@ Gráfico de performance de preprocessamento (2×3 subplots):
 - Eixo X: Thread count [1, 2, 4, 8]
 - Eixo Y: Processing time (ms)
 - Grid para facilitar leitura
-- 300 DPI para qualidade de publicação
+- Formato SVG vetorizado para qualidade de publicação
 
-#### b. `speedup_analysis.png`
+#### b. `speedup_analysis.svg`
 
-Gráfico de métricas paralelas (1×2 subplots):
+Gráfico de métricas paralelas (1×2 subplots, formato vetorizado):
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -497,8 +497,8 @@ results = benchmark.run_complete_study("images/sample_4.jpg")
 │ 5. Salvar Resultados                            │
 │    • results_academic/complete_results.json      │
 │    • results_academic/academic_summary.md        │
-│    • results_academic/preprocessing_performance.png│
-│    • results_academic/speedup_analysis.png       │
+│    • results_academic/preprocessing_performance.svg│
+│    • results_academic/speedup_analysis.svg       │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -871,8 +871,8 @@ def validate_detection_consistency(results):
 ### Para Papers
 
 **Figuras para incluir:**
-1. `preprocessing_performance.png` - Performance por filtro
-2. `speedup_analysis.png` - Speedup e eficiência
+1. `preprocessing_performance.svg` - Performance por filtro (formato vetorizado)
+2. `speedup_analysis.svg` - Speedup e eficiência (formato vetorizado)
 
 **Tabelas para incluir:**
 ```markdown
