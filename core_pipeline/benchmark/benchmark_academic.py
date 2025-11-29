@@ -233,7 +233,7 @@ class AcademicCVBenchmark:
         
         # 1. Preprocessing Performance by Thread Count
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-        fig.suptitle('OpenMP Preprocessing Performance Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('OpenMP Preprocessing Performance Analysis', fontsize=24, fontweight='bold')
         
         preprocessing = results.get("preprocessing", {})
         
@@ -268,8 +268,8 @@ class AcademicCVBenchmark:
         
         plt.tight_layout()
         plt.savefig(
-            self.results_dir / 'preprocessing_performance.png',
-            dpi=300, bbox_inches='tight'
+            self.results_dir / 'preprocessing_performance.svg',
+            format='svg', bbox_inches='tight'
         )
         plt.close()
         
@@ -340,8 +340,8 @@ class AcademicCVBenchmark:
         
         plt.tight_layout()
         plt.savefig(
-            self.results_dir / 'speedup_analysis.png',
-            dpi=300, bbox_inches='tight'
+            self.results_dir / 'speedup_analysis.svg',
+            format='svg', bbox_inches='tight'
         )
         plt.close()
         
