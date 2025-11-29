@@ -19,6 +19,7 @@ Pipeline de visão computacional focado em pesquisa, combinando preprocessamento
 ```
 
 ### Componentes Principais
+### Componentes Principais
 
 1. **`core_pipeline/src/preprocess_optimized.cpp`** - Preprocessamento paralelizado com OpenMP
    - Filtros: Blur Gaussiano, Sharpening, Bilateral Filtering, CLAHE, Edge Enhancement
